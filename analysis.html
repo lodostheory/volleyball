@@ -21,10 +21,10 @@ button{border:0;cursor:pointer}
 button:disabled{opacity:.45;cursor:default}
 input,select{background:#0b1d2a;border:1.5px solid var(--line);border-radius:9px;height:38px;padding:0 10px;min-width:0}
 input:focus,select:focus{outline:none;border-color:var(--accent)}
-.layout{display:grid;gap:12px;grid-template-areas:"bar" "score" "video" "ai" "scout" "board" "rallies" "stats" "roster"}
+.layout{display:grid;gap:12px;grid-template-areas:"bar" "score" "video" "ai" "player" "scout" "board" "rallies" "stats" "roster"}
 @media (min-width:980px){
   .layout{grid-template-columns:minmax(0,1.2fr) minmax(360px,1fr);
-    grid-template-areas:"bar board" "score board" "video board" "ai board" "scout board" "rallies board" "stats stats" "roster roster";align-items:start}
+    grid-template-areas:"bar board" "score board" "video board" "ai board" "player board" "scout board" "rallies board" "stats stats" "roster roster";align-items:start}
   .a-board{position:sticky;top:10px}
 }
 .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px;min-width:0}
@@ -211,23 +211,6 @@ details.aibox>summary small{font-weight:600;color:var(--muted);font-size:12px}
       <input id="vUrl" class="grow" placeholder="https://www.youtube.com/watch?v=...">
       <button class="btn primary" id="bLoad">불러오기</button>
     </div>
-    <div class="vid"><div id="yt"></div><div class="empty" id="vEmpty">유튜브 주소를 넣으면 여기서 경기 영상을 보면서<br>코드나 패드로 동작을 기록할 수 있습니다</div></div>
-    <div class="opts">
-      <span>입력 시각 보정 <select id="oLead"><option value="0">0초</option><option value="1">−1초</option><option value="2">−2초</option><option value="3">−3초</option><option value="5">−5초</option></select></span>
-      <span>클립 앞 <select id="oPre"><option>1</option><option>2</option><option>3</option><option>5</option><option>8</option></select>초</span>
-      <span>뒤 <select id="oPost"><option>2</option><option>3</option><option>5</option><option>8</option><option>12</option></select>초</span>
-      <span>재생 속도 <select id="oRate"><option value="0.5">0.5배</option><option value="0.75">0.75배</option><option value="1">1배</option><option value="1.25">1.25배</option><option value="1.5">1.5배</option><option value="2">2배</option></select></span>
-    </div>
-    <div class="clips hide" id="clips">
-      <div class="row"><b id="clipTitle"></b><span class="muted" id="clipCount"></span></div>
-      <div class="row" style="margin-top:6px">
-        <button class="btn sm primary" id="bPlayAll">▶ 연속 재생</button>
-        <button class="btn sm" id="bPrev">⏮</button><button class="btn sm" id="bNext">⏭</button>
-        <button class="btn sm" id="bOverlay">🗺 보드에 표시</button>
-        <button class="btn sm" id="bCloseClips" style="margin-left:auto">✕ 닫기</button>
-      </div>
-      <div class="cliplist" id="clipList"></div>
-    </div>
   </section>
 
   <section class="card" style="grid-area:ai">
@@ -281,6 +264,27 @@ details.aibox>summary small{font-weight:600;color:var(--muted);font-size:12px}
         </div>
       </div>
     </details>
+  </section>
+
+  <section class="card" style="grid-area:player">
+    <h2>▶ 경기 영상 재생 <small>위에서 불러온 영상이 여기서 재생됩니다 · 장면 모아 보기도 여기서</small></h2>
+    <div class="vid" style="margin-top:0"><div id="yt"></div><div class="empty" id="vEmpty">위 「📹 경기 영상」에 유튜브 주소를 넣고 불러오면 여기서 재생됩니다.<br>영상을 보면서 아래 「동작 기록」에 코드나 패드로 기록하세요</div></div>
+    <div class="opts">
+      <span>입력 시각 보정 <select id="oLead"><option value="0">0초</option><option value="1">−1초</option><option value="2">−2초</option><option value="3">−3초</option><option value="5">−5초</option></select></span>
+      <span>클립 앞 <select id="oPre"><option>1</option><option>2</option><option>3</option><option>5</option><option>8</option></select>초</span>
+      <span>뒤 <select id="oPost"><option>2</option><option>3</option><option>5</option><option>8</option><option>12</option></select>초</span>
+      <span>재생 속도 <select id="oRate"><option value="0.5">0.5배</option><option value="0.75">0.75배</option><option value="1">1배</option><option value="1.25">1.25배</option><option value="1.5">1.5배</option><option value="2">2배</option></select></span>
+    </div>
+    <div class="clips hide" id="clips">
+      <div class="row"><b id="clipTitle"></b><span class="muted" id="clipCount"></span></div>
+      <div class="row" style="margin-top:6px">
+        <button class="btn sm primary" id="bPlayAll">▶ 연속 재생</button>
+        <button class="btn sm" id="bPrev">⏮</button><button class="btn sm" id="bNext">⏭</button>
+        <button class="btn sm" id="bOverlay">🗺 보드에 표시</button>
+        <button class="btn sm" id="bCloseClips" style="margin-left:auto">✕ 닫기</button>
+      </div>
+      <div class="cliplist" id="clipList"></div>
+    </div>
   </section>
 
   <section class="card" style="grid-area:scout">
@@ -807,7 +811,13 @@ function seek(t, play) { try { if (ytOk() && t != null) { yt.seekTo(Math.max(0, 
 function togglePlay() { try { if (!ytOk()) return; if (yt.getPlayerState() === 1) yt.pauseVideo(); else yt.playVideo(); } catch (e) {} }
 function nudge(d) { const n = vNow(); if (n != null) try { yt.seekTo(Math.max(0, n + d), true); } catch (e) {} }
 function toggleSlow() { slow = !slow; try { yt.setPlaybackRate(slow ? .5 : +opt.rate); } catch (e) {} toast(slow ? '느리게 (0.5배)' : `보통 속도 (${opt.rate}배)`); }
-$('bLoad').onclick = () => { const u = $('vUrl').value.trim(); if (!ytId(u)) { toast('유튜브 주소를 확인하세요'); return; } M.video = u; changed(); loadVideo(u); };
+$('bLoad').onclick = () => {
+  const u = $('vUrl').value.trim();
+  if (!ytId(u)) { toast('유튜브 주소를 확인하세요'); return; }
+  M.video = u; changed(); loadVideo(u);
+  $('yt').closest('.card').scrollIntoView({ block: 'nearest', behavior: 'smooth' });   // 재생 화면은 아래(AI 영상 인식 다음)에 있다
+  toast('불러왔습니다 · 아래 「경기 영상 재생」에서 재생됩니다');
+};
 $('vUrl').onkeydown = e => { if (e.key === 'Enter') $('bLoad').click(); };
 for (const [id, k] of [['oLead', 'lead'], ['oPre', 'pre'], ['oPost', 'post'], ['oRate', 'rate']]) {
   $(id).value = String(opt[k]);
