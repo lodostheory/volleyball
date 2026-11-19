@@ -72,14 +72,14 @@ button{font:inherit;color:inherit;border:0;cursor:pointer}
   background:#fff;color:#0b1d2a;font-weight:800;font-size:13px;padding:9px 16px;border-radius:999px;transition:all .25s;z-index:9;box-shadow:0 6px 20px #0008}
 .toast.show{opacity:1;transform:translate(-50%,0)}
 
-/* 탭: 수비 포메이션 / 배구 게임(game.html 을 iframe 으로) */
+/* 탭: 수비 포메이션 / 배구 게임(game.html) / 경기 분석(analysis.html) — 뒤의 둘은 iframe 으로 */
 .tabs{order:3;flex:1 0 100%;display:flex;gap:4px;padding:3px;border-radius:12px;background:var(--panel);border:1px solid var(--line)}
 .tab{flex:1;height:34px;border-radius:9px;background:transparent;color:var(--muted);font-size:14px;font-weight:800;white-space:nowrap}
 .tab[aria-selected="true"]{background:var(--accent);color:var(--accent-ink)}
-.gameview{display:none;flex:1 1 0;min-height:0;position:relative}
-.gameview iframe{position:absolute;inset:0;width:100%;height:100%;border:0;display:block;background:var(--bg)}
-.app.game .court,.app.game .panel,.app.game .teambtn{display:none}
-.app.game .gameview{display:block}
+.frameview{display:none;flex:1 1 0;min-height:0;position:relative}
+.frameview iframe{position:absolute;inset:0;width:100%;height:100%;border:0;display:block;background:var(--bg)}
+.app.framed .court,.app.framed .panel,.app.framed .teambtn{display:none}
+.frameview.on{display:block}
 
 /* 가로로 넓은 화면(폰 가로모드·태블릿 가로): 코트 왼쪽, 조작부 오른쪽.
    폴더블 펼침처럼 정사각형에 가까운 화면은 세로 화면과 같은 배치(코트 위, 버튼 아래)를 쓴다 */
@@ -99,12 +99,12 @@ button{font:inherit;color:inherit;border:0;cursor:pointer}
   .status{flex-direction:column;align-items:flex-start}
   .tabs{order:0;flex:0 0 auto;width:100%;margin-top:10px}
   .tab{height:clamp(36px,7dvh,46px);font-size:15px}
-  /* 게임 탭: 머리글을 한 줄로 줄이고 게임을 가로 전체에 */
-  .app.game{display:flex;flex-direction:column}
-  .app.game header{flex-direction:row;align-items:center;padding:6px 16px;gap:16px}
-  .app.game h1{font-size:20px}
-  .app.game .tabs{width:auto;flex:0 1 360px;margin-top:0}
-  .app.game .tab{height:34px;font-size:14px}
+  /* 게임·분석 탭: 머리글을 한 줄로 줄이고 내용을 가로 전체에 */
+  .app.framed{display:flex;flex-direction:column}
+  .app.framed header{flex-direction:row;align-items:center;padding:6px 16px;gap:16px}
+  .app.framed h1{font-size:20px}
+  .app.framed .tabs{width:auto;flex:0 1 460px;margin-top:0}
+  .app.framed .tab{height:34px;font-size:14px}
 }
 @media (min-aspect-ratio: 5/4) and (max-height:420px){
   header{padding-top:8px}
@@ -132,8 +132,9 @@ button{font:inherit;color:inherit;border:0;cursor:pointer}
   <header>
     <h1>VOLLYBALL <span>MANIA</span></h1>
     <nav class="tabs" role="tablist" aria-label="화면 선택">
-      <button class="tab" role="tab" data-tab="formation" aria-selected="true">🏐 수비 포메이션</button>
-      <button class="tab" role="tab" data-tab="game" aria-selected="false">🎮 배구 게임</button>
+      <button class="tab" role="tab" data-tab="formation" aria-selected="true">🏐 포메이션</button>
+      <button class="tab" role="tab" data-tab="analysis" aria-selected="false">📹 경기 분석</button>
+      <button class="tab" role="tab" data-tab="game" aria-selected="false">🎮 게임</button>
     </nav>
     <button class="teambtn hide" id="btnTeam"></button>
   </header>
@@ -199,7 +200,8 @@ button{font:inherit;color:inherit;border:0;cursor:pointer}
     </div>
   </section>
 
-  <section class="gameview" id="gameView" aria-label="배구 게임"></section>
+  <section class="frameview" id="view-analysis" data-src="analysis.html" aria-label="경기 영상 분석"></section>
+  <section class="frameview" id="view-game" data-src="game.html" aria-label="배구 게임"></section>
 </div>
 <div class="sheet hide" id="sheet"><div class="card" id="card"></div></div>
 <div class="toast" id="toast"></div>
@@ -745,44 +747,46 @@ if (team) {                            // 시작할 때 서버의 최신 위치�
   }).catch(() => {});
 }
 
-/* ---------- 탭: 수비 포메이션 / 배구 게임 ----------
-   게임(game.html)은 처음 열 때 iframe 으로 불러오고, 다른 탭으로 가면 일시정지시킨다 */
-const app = $('app'), gameView = $('gameView'), tabBtns = [...document.querySelectorAll('.tab')];
-let gameFrame = null;
+/* ---------- 탭: 수비 포메이션 / 경기 분석 / 배구 게임 ----------
+   분석(analysis.html)·게임(game.html)은 처음 열 때 iframe 으로 불러온다. 게임 탭을 떠나면 게임을 일시정지시킨다 */
+const app = $('app'), tabBtns = [...document.querySelectorAll('.tab')];
+const frames = {};            // 탭 이름 → iframe
+let curTab = 'formation';
 const toGame = m => {          // 같은 출처면 바로 호출(키 눌림·뗌 순서 보장), 아니면 postMessage
-  if (!gameFrame) return;
-  const w = gameFrame.contentWindow;
+  const f = frames.game; if (!f) return;
+  const w = f.contentWindow;
   try { if (typeof w.vbMsg === 'function') { w.vbMsg(m); return; } } catch (e) {}
   try { w.postMessage(m, '*'); } catch (e) {}
 };
-function focusGame() { if (!gameFrame) return; try { gameFrame.focus(); gameFrame.contentWindow.focus(); } catch (e) {} }
+function focusGame() { const f = frames.game; if (!f || curTab !== 'game') return; try { f.focus(); f.contentWindow.focus(); } catch (e) {} }
 function setTab(tab) {
-  const game = tab === 'game';
+  if (!['formation', 'analysis', 'game'].includes(tab)) tab = 'formation';
   tabBtns.forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === tab)));
-  if (game === app.classList.contains('game')) { if (game) focusGame(); return; }
-  app.classList.toggle('game', game);
-  if (game) {
+  if (tab === curTab) { focusGame(); return; }
+  const prev = curTab; curTab = tab;
+  if (prev === 'game') toGame({ vb: 'hide' });
+  app.classList.toggle('framed', tab !== 'formation');
+  document.querySelectorAll('.frameview').forEach(v => v.classList.toggle('on', v.id === 'view-' + tab));
+  if (tab === 'formation') { cur = clone(data()[current].pos); draw(); }
+  else {
     stopAnim();
-    if (!gameFrame) {
-      gameFrame = document.createElement('iframe');
-      gameFrame.title = '배구 게임';
-      gameFrame.allow = 'fullscreen; autoplay';
-      gameFrame.setAttribute('allowfullscreen', '');
-      gameFrame.addEventListener('load', focusGame);
-      gameFrame.src = 'game.html';
-      gameView.appendChild(gameFrame);
-    } else toGame({ vb: 'show' });
+    if (!frames[tab]) {
+      const view = $('view-' + tab), f = document.createElement('iframe');
+      f.title = view.getAttribute('aria-label');
+      f.allow = 'fullscreen; autoplay; encrypted-media; picture-in-picture';
+      f.setAttribute('allowfullscreen', '');
+      if (tab === 'game') f.addEventListener('load', focusGame);
+      f.src = view.dataset.src;
+      view.appendChild(f); frames[tab] = f;
+    } else if (tab === 'game') toGame({ vb: 'show' });
     focusGame();
-  } else {
-    toGame({ vb: 'hide' });
-    cur = clone(data()[current].pos); draw();
   }
-  try { history.replaceState(null, '', game ? '#game' : location.pathname + location.search); } catch (e) {}
+  try { history.replaceState(null, '', tab === 'formation' ? location.pathname + location.search : '#' + tab); } catch (e) {}
 }
 tabBtns.forEach(b => b.onclick = () => setTab(b.dataset.tab));
 // 게임 탭에서 포커스가 게임 바깥(탭 버튼 등)에 있을 때 누른 키도 게임으로 보낸다
 const fwdKey = e => {
-  if (!gameFrame || !app.classList.contains('game')) return;
+  if (!frames.game || curTab !== 'game') return;
   if (e.ctrlKey || e.metaKey || e.altKey || e.key === 'Tab' || /^F\d+$/.test(e.key)) return;
   if (e.target && e.target.tagName === 'BUTTON' && (e.key === 'Enter' || e.key === ' ')) return;
   e.preventDefault();
@@ -791,7 +795,7 @@ const fwdKey = e => {
 };
 addEventListener('keydown', fwdKey);
 addEventListener('keyup', fwdKey);
-if (location.hash === '#game') setTab('game');
+if (location.hash.length > 1) setTab(location.hash.slice(1));
 
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
   navigator.serviceWorker.register('sw.js').catch(() => {});

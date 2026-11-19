@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>경기 영상 분석</title>
+<meta name="theme-color" content="#0b1d2a">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<style>
+:root{
+  --bg:#0b1d2a; --panel:#122a3a; --panel2:#1a3a4f; --line:#2a5068;
+  --text:#eef6fb; --muted:#8fb0c4; --accent:#ffb020; --accent-ink:#2a1a00;
+  --danger:#ff5a4e; --ok:#3ddc97; --home:#4cc9f0; --away:#ff6b6b;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard","Noto Sans KR","Malgun Gothic",sans-serif;font-size:14px}
+body{padding:10px 12px 48px}
+button,input,select{font:inherit;color:inherit}
+button{border:0;cursor:pointer}
+input,select{background:#0b1d2a;border:1.5px solid var(--line);border-radius:9px;height:38px;padding:0 10px;min-width:0}
+input:focus,select:focus{outline:none;border-color:var(--accent)}
+.layout{display:grid;gap:12px;grid-template-areas:"bar" "score" "video" "board" "rallies" "roster" "stats"}
+@media (min-width:980px){
+  .layout{grid-template-columns:minmax(0,1.2fr) minmax(360px,1fr);
+    grid-template-areas:"bar board" "score board" "video board" "rallies board" "roster stats";align-items:start}
+  .a-board{position:sticky;top:10px}
+}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px;min-width:0}
+.card h2{margin:0 0 8px;font-size:15px;display:flex;align-items:center;gap:8px}
+.card h2 small{font-weight:600;color:var(--muted);font-size:12px}
+.row{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.grow{flex:1 1 140px}
+.btn{height:38px;padding:0 12px;border-radius:10px;background:var(--panel2);border:1.5px solid var(--line);font-weight:800;white-space:nowrap}
+.btn:active{transform:scale(.97)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.save{background:var(--ok);border-color:var(--ok);color:#00301c}
+.btn.danger{background:#3a1d22;border-color:var(--danger);color:#ffb3ad}
+.btn:disabled{opacity:.45;cursor:default;transform:none}
+.muted{color:var(--muted);font-size:12px}
+.hide{display:none!important}
+
+/* 점수판 */
+.score{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center}
+.score .team{display:flex;flex-direction:column;gap:6px}
+.score .team.away{align-items:flex-end}
+.score .team input{width:100%;font-weight:900;font-size:16px;text-align:center}
+.score .team.home input{border-color:var(--home)} .score .team.away input{border-color:var(--away)}
+.board-num{display:flex;align-items:center;gap:10px;font-variant-numeric:tabular-nums}
+.pts{font-size:46px;font-weight:900;line-height:1;min-width:58px;text-align:center;color:var(--accent)}
+.setw{display:flex;flex-direction:column;align-items:center;font-size:11px;color:var(--muted)}
+.setw b{font-size:22px;color:var(--text)}
+.sets{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-top:8px}
+.sets span{background:var(--panel2);border-radius:8px;padding:3px 8px;font-size:12px;font-variant-numeric:tabular-nums}
+.sets span.cur{outline:1.5px solid var(--accent)}
+.status{text-align:center;margin-top:6px;font-weight:800;color:var(--muted)}
+.status.over{color:var(--ok)}
+
+/* 영상 */
+.vid{position:relative;width:100%;aspect-ratio:16/9;background:#000;border-radius:10px;overflow:hidden;margin-top:8px}
+.vid iframe,.vid #yt{position:absolute;inset:0;width:100%;height:100%;border:0}
+.vid .empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);text-align:center;padding:16px;line-height:1.5}
+
+/* 보드 */
+.boardwrap{display:flex;justify-content:center}
+#svg{width:100%;max-height:78vh;display:block;touch-action:none;user-select:none;-webkit-user-select:none}
+.tok{cursor:grab}
+.tok text{font-weight:900;text-anchor:middle;dominant-baseline:central;pointer-events:none}
+.caption{font-weight:800;margin-bottom:6px}
+.caption.edit{color:var(--accent)}
+.atks{display:flex;flex-direction:column;gap:5px;margin:8px 0}
+.atk{display:flex;align-items:center;gap:6px;flex-wrap:wrap;background:var(--panel2);border-radius:10px;padding:5px 8px}
+.atk .who{font-weight:800;min-width:84px}
+.chip{height:30px;padding:0 9px;border-radius:999px;background:#0b1d2a;border:1.5px solid var(--line);font-size:12px;font-weight:800}
+.chip.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.x{background:none;color:var(--muted);font-size:16px;padding:0 4px;margin-left:auto}
+.pointbtns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.pointbtns .btn{height:52px;font-size:15px;white-space:normal;line-height:1.2}
+.pointbtns .home{background:#0f3a4d;border-color:var(--home)}
+.pointbtns .away{background:#4a1f25;border-color:var(--away)}
+.sub{margin-top:8px;padding-top:8px;border-top:1px dashed var(--line)}
+
+/* 랠리 목록·통계 */
+.list{max-height:340px;overflow:auto;margin-top:6px;border-radius:10px;border:1px solid var(--line)}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th,td{padding:6px 7px;text-align:center;border-bottom:1px solid var(--line);white-space:nowrap}
+th{position:sticky;top:0;background:var(--panel2);font-size:12px;color:var(--muted)}
+td.l,th.l{text-align:left}
+tr.click{cursor:pointer} tr.click:hover{background:#ffffff0d}
+tr.sel{background:#ffb02026}
+tr.tot td{font-weight:900;background:#ffffff08}
+.dotH,.dotA{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;vertical-align:middle}
+.dotH{background:var(--home)} .dotA{background:var(--away)}
+.tlink{color:var(--accent);text-decoration:underline;cursor:pointer}
+.stats{display:grid;gap:12px}
+.stats h3{margin:0 0 6px;font-size:14px}
+.bar{height:6px;border-radius:3px;background:var(--accent);display:block;margin-top:2px}
+.roster{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(250px,1fr))}
+.stats{grid-template-columns:repeat(auto-fit,minmax(330px,1fr))}
+.roster>div,.stats>div{min-width:0}
+.roster table input{height:32px;width:100%}
+.roster td{padding:3px}
+
+.sheet{position:fixed;inset:0;z-index:8;background:#000a;display:flex;align-items:center;justify-content:center;padding:16px}
+.sheet .box{width:min(100%,460px);max-height:84vh;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px}
+.sheet h2{margin:0 0 10px;font-size:17px}
+.sheet p{margin:0 0 10px;color:var(--muted);line-height:1.5;font-size:13px}
+.sheet input{width:100%;margin-bottom:8px;height:44px}
+.item{display:block;width:100%;text-align:left;padding:10px 12px;margin-bottom:6px;border-radius:11px;background:var(--panel2);border:1.5px solid var(--line)}
+.item b{display:block;font-size:14px}
+.toast{position:fixed;left:50%;top:14px;transform:translate(-50%,-20px);opacity:0;pointer-events:none;background:#fff;color:#0b1d2a;
+  font-weight:800;font-size:13px;padding:9px 16px;border-radius:999px;transition:all .25s;z-index:9;box-shadow:0 6px 20px #0008}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+</style>
+</head>
+<body>
+<div class="layout">
+
+  <section class="card a-bar" style="grid-area:bar">
+    <div class="row">
+      <input id="mName" class="grow" maxlength="40" placeholder="경기 이름 (비우면 날짜·팀이름으로)">
+      <button class="btn" id="bList">📂 경기 목록</button>
+      <button class="btn" id="bNew">＋ 새 경기</button>
+      <button class="btn save" id="bSave">☁ 서버 저장</button>
+      <button class="btn danger hide" id="bDel">🗑</button>
+    </div>
+    <div class="muted" id="saveState" style="margin-top:6px"></div>
+  </section>
+
+  <section class="card" style="grid-area:score">
+    <div class="score">
+      <div class="team home"><input id="homeName" maxlength="20" placeholder="우리 팀 이름"></div>
+      <div class="board-num">
+        <div class="setw">세트<b id="hSets">0</b></div>
+        <div class="pts" id="hPts">0</div><div style="font-size:28px;font-weight:900">:</div><div class="pts" id="aPts">0</div>
+        <div class="setw">세트<b id="aSets">0</b></div>
+      </div>
+      <div class="team away"><input id="awayName" maxlength="20" placeholder="상대 팀 이름"></div>
+    </div>
+    <div class="sets" id="setList"></div>
+    <div class="status" id="status"></div>
+    <div class="row" style="justify-content:center;margin-top:8px">
+      <span class="muted">세트 점수</span>
+      <select id="setPoints"><option value="15">15점</option><option value="21">21점</option><option value="25">25점</option></select>
+      <span class="muted">· 3세트 2선승 · 2점 차</span>
+    </div>
+  </section>
+
+  <section class="card" style="grid-area:video">
+    <h2>📹 경기 영상 <small>유튜브 주소를 넣고 불러오기</small></h2>
+    <div class="row">
+      <input id="vUrl" class="grow" placeholder="https://www.youtube.com/watch?v=...">
+      <button class="btn primary" id="bLoad">불러오기</button>
+    </div>
+    <div class="vid"><div id="yt"></div><div class="empty" id="vEmpty">유튜브 주소를 넣으면 여기서 경기 영상을 보면서<br>득점마다 선수 위치와 공격을 기록할 수 있습니다</div></div>
+  </section>
+
+  <section class="card a-board" style="grid-area:board">
+    <div class="caption" id="caption"></div>
+    <div class="boardwrap">
+      <svg id="svg" viewBox="-8 -9 116 218" preserveAspectRatio="xMidYMid meet" aria-label="코트 보드">
+        <defs>
+          <marker id="mH" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#4cc9f0"/></marker>
+          <marker id="mA" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#ff6b6b"/></marker>
+          <marker id="mG" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#9aa8b2"/></marker>
+        </defs>
+        <rect x="-8" y="-9" width="116" height="218" fill="#0f4a52"/>
+        <rect x="0" y="0" width="100" height="100" fill="#c9742e"/>
+        <rect x="0" y="100" width="100" height="100" fill="#e8923f"/>
+        <g id="zones" stroke="#f3e6d6" stroke-width=".4" opacity=".55"></g>
+        <rect x="0" y="0" width="100" height="200" fill="none" stroke="#fff" stroke-width=".9"/>
+        <text id="tAway" x="50" y="-3.2" font-size="4.2" fill="#ffb3b3" text-anchor="middle" font-weight="800"></text>
+        <text id="tHome" x="50" y="206" font-size="4.2" fill="#a6e6f7" text-anchor="middle" font-weight="800"></text>
+        <line x1="-3" y1="100" x2="103" y2="100" stroke="#10222e" stroke-width="2.6"/>
+        <line x1="-3" y1="100" x2="103" y2="100" stroke="#fff" stroke-width="1.5" stroke-dasharray="1.2 1.2"/>
+        <g id="arrows"></g>
+        <g id="toks"></g>
+      </svg>
+    </div>
+    <div class="muted" id="hint">선수를 끌어 위치를 옮기세요 · 선수를 <b>탭</b>한 뒤 코트를 탭하면 그 선수의 공격 화살표가 생깁니다</div>
+    <div class="atks" id="atks"></div>
+    <div class="row">
+      <button class="btn" id="bTime">⏱ 랠리 시작 = 지금</button>
+      <span class="muted" id="tLabel"></span>
+      <button class="btn" id="bReset" style="margin-left:auto">기본 위치</button>
+    </div>
+    <div class="sub">
+      <div class="row"><span class="muted">득점 방법</span>
+        <span id="whys"></span>
+      </div>
+      <div class="row" style="margin-top:6px"><span class="muted">득점 선수</span>
+        <select id="by" class="grow"></select>
+      </div>
+      <div class="pointbtns">
+        <button class="btn home" id="pHome"></button>
+        <button class="btn away" id="pAway"></button>
+      </div>
+      <div class="row hide" id="editRow" style="margin-top:8px">
+        <button class="btn danger" id="bDelRally">이 랠리 삭제</button>
+        <button class="btn" id="bCancelEdit">편집 취소</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="card" style="grid-area:rallies">
+    <h2>📋 득점 기록 <small id="rCount"></small></h2>
+    <div class="row"><button class="btn" id="bUndo">↶ 마지막 랠리 취소</button><span class="muted">줄을 누르면 그 랠리를 보드에 띄우고 영상도 그 시각으로 이동</span></div>
+    <div class="list"><table><thead><tr><th>#</th><th>세트</th><th>점수</th><th class="l">득점</th><th class="l">방법</th><th>영상</th></tr></thead><tbody id="rBody"></tbody></table></div>
+  </section>
+
+  <section class="card" style="grid-area:roster">
+    <h2>👥 선수 명단 <small>등번호가 보드에 표시됩니다</small></h2>
+    <div class="roster" id="roster"></div>
+  </section>
+
+  <section class="card" style="grid-area:stats">
+    <h2 id="statsTitle">📊 선수별 기록</h2>
+    <div class="muted" style="margin-bottom:8px">득점 = 공격·블로킹·서브 득점 · 공격 성공률 = 공격 득점 ÷ 공격 시도 · 공격 점유율 = 선수 공격 시도 ÷ 팀 공격 시도</div>
+    <div class="stats" id="stats"></div>
+  </section>
+</div>
+<div class="sheet hide" id="sheet"><div class="box" id="box"></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+'use strict';
+const $ = id => document.getElementById(id);
+const NS = 'http://www.w3.org/2000/svg';
+const API = String(window.VBM_API || 'https://vollyball-mania.lodostheory.workers.dev').replace(/\/$/, '');
+const KEY = 'vollyball-mania.analysis', PW_KEY = 'vollyball-mania.matchpw';
+const clone = o => JSON.parse(JSON.stringify(o));
+const lsGet = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k)); return v == null ? d : v; } catch (e) { return d; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+/* ---------- 데이터 ----------
+   보드 좌표: x 0~100, y 0~200 (0~100 상대 코트, 100 = 네트, 100~200 우리 코트)
+   pos[0~8] = 우리 팀(home) 선수, pos[9~17] = 상대 팀(away) 선수 */
+const GRID = [[20,15],[50,15],[80,15],[20,48],[50,48],[80,48],[20,80],[50,80],[80,80]];   // 네트에서의 거리
+const BASE_POS = [...GRID.map(([x, y]) => [x, 100 + y]), ...GRID.map(([x, y]) => [100 - x, 100 - y])];
+const WHY = { atk: '공격', blk: '블로킹', srv: '서브', err: '상대 범실' };
+const RES = { kill: '득점', err: '범실', blk: '차단됨', cont: '연결' };
+const team = name => ({ name, players: Array.from({ length: 9 }, (_, i) => ({ no: String(i + 1), name: '' })) });
+const blank = () => ({ v: 1, home: team(''), away: team(''), video: '', setPoints: 21, rallies: [] });
+
+const saved = lsGet(KEY, null);
+let M = saved && saved.M ? saved.M : blank();
+let serverName = saved ? saved.serverName || '' : '';
+let dirty = saved ? !!saved.dirty : false;
+$('mName').value = saved ? saved.name || '' : '';
+const pws = lsGet(PW_KEY, {});
+
+const newDraft = pos => ({ pos: clone(pos || (M.rallies.length ? M.rallies[M.rallies.length - 1].pos : BASE_POS)), atks: [], t: null, why: 'atk', by: '', edit: null });
+let draft = newDraft();
+let sel = null;          // 공격수로 고른 선수(0~17)
+
+function persist() { lsSet(KEY, { M, serverName, dirty, name: $('mName').value }); }
+function changed() { dirty = true; persist(); render(); }
+
+/* ---------- 점수 계산: 세트 점수에 2점 차가 나면 다음 세트, 2세트 먼저 따면 경기 종료 ---------- */
+function walk() {
+  const info = [], sets = []; let cur = [0, 0], won = [0, 0], set = 1, over = false;
+  for (const r of M.rallies) {
+    if (over) { info.push(null); continue; }
+    cur[r.win]++;
+    info.push({ set, score: [...cur] });
+    const w = r.win, l = 1 - w;
+    if (cur[w] >= M.setPoints && cur[w] - cur[l] >= 2) {
+      won[w]++; sets.push([...cur]); cur = [0, 0];
+      if (won[w] >= 2) over = true; else set++;
+    }
+  }
+  return { info, sets, cur, won, set, over, winner: over ? (won[0] >= 2 ? 0 : 1) : null };
+}
+function stats(W) {
+  const S = [0, 1].map(() => Array.from({ length: 9 }, () => ({ pts: 0, att: 0, kill: 0 })));
+  const tot = [0, 0];
+  M.rallies.forEach((r, i) => {
+    if (!W.info[i]) return;
+    for (const a of r.atks) { S[a.side][a.p].att++; tot[a.side]++; if (a.r === 'kill') S[a.side][a.p].kill++; }
+    if (r.by != null && r.why !== 'err') S[r.win][r.by].pts++;
+  });
+  return { S, tot };
+}
+const pct = (a, b) => b ? Math.round(a / b * 1000) / 10 : 0;
+const tName = s => (s ? M.away.name : M.home.name) || (s ? '상대 팀' : '우리 팀');
+const pLabel = (s, p) => { const q = (s ? M.away : M.home).players[p]; return '#' + (q.no || p + 1) + (q.name ? ' ' + q.name : ''); };
+const fmtT = t => { if (t == null) return ''; t = Math.round(t); const h = t / 3600 | 0, m = (t % 3600) / 60 | 0, s = t % 60; return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(s).padStart(2, '0'); };
+
+/* ---------- 보드 ---------- */
+const svg = $('svg');
+const el = (tag, attrs, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; };
+for (const v of [100 / 3, 200 / 3]) {
+  el('line', { x1: v, y1: 0, x2: v, y2: 200 }, $('zones'));
+  el('line', { x1: 0, y1: v, x2: 100, y2: v }, $('zones'));
+  el('line', { x1: 0, y1: 100 + v, x2: 100, y2: 100 + v }, $('zones'));
+}
+const toks = [];
+for (let i = 0; i < 18; i++) {
+  const away = i >= 9;
+  const g = el('g', { class: 'tok', 'data-i': i }, $('toks'));
+  el('circle', { r: 7.5, fill: 'transparent' }, g);
+  el('circle', { class: 'ring', r: 6.6, fill: 'none', stroke: '#ffe14a', 'stroke-width': 1.3, opacity: 0 }, g);
+  el('circle', { r: 4.8, fill: away ? '#ff6b6b' : '#4cc9f0', stroke: '#10222e', 'stroke-width': .8 }, g);
+  el('text', { 'font-size': 4.2, fill: away ? '#fff' : '#06222c', y: .2 }, g);
+  toks.push(g);
+}
+function drawBoard() {
+  const pos = draft.pos;
+  toks.forEach((g, i) => {
+    g.setAttribute('transform', `translate(${pos[i][0]} ${pos[i][1]})`);
+    const s = i >= 9 ? 1 : 0, p = i % 9, no = (s ? M.away : M.home).players[p].no || String(p + 1);
+    const t = g.querySelector('text'); t.textContent = no; t.setAttribute('font-size', no.length > 2 ? 3.2 : 4.2);
+    g.querySelector('.ring').setAttribute('opacity', sel === i ? 1 : 0);
+  });
+  const A = $('arrows'); A.replaceChildren();
+  draft.atks.forEach((a, k) => {
+    const col = a.r === 'err' ? '#9aa8b2' : a.side ? '#ff6b6b' : '#4cc9f0';
+    const [x1, y1] = a.from, [x2, y2] = a.to, d = Math.hypot(x2 - x1, y2 - y1) || 1, sh = Math.min(5, d * .4);
+    el('line', { x1, y1, x2: x2 - (x2 - x1) / d * 1.5, y2: y2 - (y2 - y1) / d * 1.5, stroke: col, 'stroke-width': a.r === 'kill' ? 1.9 : 1.1,
+      'stroke-dasharray': a.r === 'err' ? '2 1.5' : a.r === 'cont' ? '3 1' : '', 'marker-end': `url(#${a.r === 'err' ? 'mG' : a.side ? 'mA' : 'mH'})`, opacity: .95 }, A);
+    if (a.r === 'blk') { const c = el('g', { stroke: '#fff', 'stroke-width': 1.3 }, A); el('line', { x1: x2 - 2, y1: y2 - 2, x2: x2 + 2, y2: y2 + 2 }, c); el('line', { x1: x2 - 2, y1: y2 + 2, x2: x2 + 2, y2: y2 - 2 }, c); }
+    else if (a.r === 'kill') el('circle', { cx: x2, cy: y2, r: 2.4, fill: 'none', stroke: col, 'stroke-width': 1 }, A);
+    const mx = x1 + (x2 - x1) * .5, my = y1 + (y2 - y1) * .5;
+    el('circle', { cx: mx, cy: my, r: 2.3, fill: '#10222e' }, A);
+    el('text', { x: mx, y: my + .1, 'font-size': 2.8, fill: '#fff', 'text-anchor': 'middle', 'dominant-baseline': 'central', 'font-weight': 900 }, A).textContent = k + 1;
+    void sh;
+  });
+  $('tHome').textContent = '▼ ' + tName(0) + ' (우리)';
+  $('tAway').textContent = '▲ ' + tName(1) + ' (상대)';
+}
+function svgPoint(ev) { const p = new DOMPoint(ev.clientX, ev.clientY).matrixTransform(svg.getScreenCTM().inverse()); return [p.x, p.y]; }
+const clampP = ([x, y]) => [Math.round(Math.max(-6, Math.min(106, x)) * 2) / 2, Math.round(Math.max(-7, Math.min(207, y)) * 2) / 2];
+let drag = null;
+svg.addEventListener('pointerdown', ev => {
+  const g = ev.target.closest('.tok'), p = svgPoint(ev);
+  if (g) {
+    const i = +g.dataset.i;
+    drag = { i, id: ev.pointerId, start: p, dx: draft.pos[i][0] - p[0], dy: draft.pos[i][1] - p[1], moved: false };
+    try { svg.setPointerCapture(ev.pointerId); } catch (e) {}
+    ev.preventDefault(); return;
+  }
+  if (sel != null && p[0] >= -6 && p[0] <= 106 && p[1] >= -7 && p[1] <= 207) {     // 공격 화살표 추가
+    const s = sel >= 9 ? 1 : 0;
+    draft.atks.push({ side: s, p: sel % 9, from: clone(draft.pos[sel]), to: clampP(p), r: 'cont' });
+    sel = null; render(); ev.preventDefault();
+  }
+});
+svg.addEventListener('pointermove', ev => {
+  if (!drag || ev.pointerId !== drag.id) return;
+  const p = svgPoint(ev);
+  if (!drag.moved && Math.hypot(p[0] - drag.start[0], p[1] - drag.start[1]) < 1.5) return;
+  drag.moved = true;
+  draft.pos[drag.i] = clampP([p[0] + drag.dx, p[1] + drag.dy]);
+  drawBoard();
+});
+const endDrag = ev => {
+  if (!drag || ev.pointerId !== drag.id) return;
+  const d = drag; drag = null;
+  if (!d.moved) sel = sel === d.i ? null : d.i;     // 탭 = 공격수 선택/해제
+  render();
+};
+svg.addEventListener('pointerup', endDrag);
+svg.addEventListener('pointercancel', endDrag);
+
+/* ---------- 유튜브 ---------- */
+let yt = null, ytWant = null;
+function ytId(u) {
+  u = String(u || '').trim();
+  const m = u.match(/(?:youtu\.be\/|[?&]v=|\/embed\/|\/shorts\/|\/live\/)([\w-]{11})/);
+  return m ? m[1] : /^[\w-]{11}$/.test(u) ? u : null;
+}
+function ytStart(u) {
+  const m = String(u).match(/[?&#](?:t|start)=(\d+)/); return m ? +m[1] : 0;
+}
+function makePlayer(id, start) {
+  yt = new YT.Player('yt', { videoId: id, playerVars: { playsinline: 1, rel: 0, start }, events: {} });
+}
+function loadVideo(u, quiet) {
+  const id = ytId(u);
+  if (!id) { if (!quiet) toast('유튜브 주소를 확인하세요'); return; }
+  $('vEmpty').classList.add('hide');
+  if (window.YT && YT.Player) {
+    if (yt && yt.cueVideoById) yt.cueVideoById({ videoId: id, startSeconds: ytStart(u) }); else makePlayer(id, ytStart(u));
+  } else {
+    ytWant = [id, ytStart(u)];
+    if (!$('ytapi')) { const s = document.createElement('script'); s.id = 'ytapi'; s.src = 'https://www.youtube.com/iframe_api'; document.head.appendChild(s); }
+  }
+}
+window.onYouTubeIframeAPIReady = () => { if (ytWant) { const [id, st] = ytWant; ytWant = null; makePlayer(id, st); } };
+const vNow = () => { try { return yt && yt.getCurrentTime ? yt.getCurrentTime() : null; } catch (e) { return null; } };
+function seek(t) { try { if (yt && yt.seekTo && t != null) { yt.seekTo(t, true); if (yt.pauseVideo) yt.pauseVideo(); } } catch (e) {} }
+$('bLoad').onclick = () => { const u = $('vUrl').value.trim(); if (!ytId(u)) { toast('유튜브 주소를 확인하세요'); return; } M.video = u; changed(); loadVideo(u); };
+$('vUrl').onkeydown = e => { if (e.key === 'Enter') $('bLoad').click(); };
+
+/* ---------- 기록 ---------- */
+$('bTime').onclick = () => { const t = vNow(); if (t == null) { toast('먼저 영상을 불러오세요'); return; } draft.t = Math.max(0, Math.round(t)); render(); };
+$('bReset').onclick = () => { draft.pos = clone(BASE_POS); render(); };
+function confirmPoint(win) {
+  const W = walk();
+  if (draft.edit == null && W.over) { toast('경기가 끝났습니다 · 새 경기를 만드세요'); return; }
+  let by = null;
+  if (draft.by) { const [s, p] = draft.by.split(':').map(Number); if (s === win) by = p; }
+  if (by == null && draft.why === 'atk') { const k = [...draft.atks].reverse().find(a => a.r === 'kill' && a.side === win); if (k) by = k.p; }
+  let t = draft.t;
+  if (t == null) { const n = vNow(); if (n != null) t = Math.max(0, Math.round(n - 8)); }
+  const r = { t, pos: clone(draft.pos), atks: clone(draft.atks), win, why: draft.why, by: draft.why === 'err' ? null : by };
+  if (draft.edit != null) { M.rallies[draft.edit] = r; draft = newDraft(); toast('랠리를 수정했습니다'); }
+  else { M.rallies.push(r); draft = newDraft(r.pos); toast(tName(win) + ' 득점'); }
+  sel = null; changed();
+}
+$('pHome').onclick = () => confirmPoint(0);
+$('pAway').onclick = () => confirmPoint(1);
+$('by').onchange = () => { draft.by = $('by').value; };
+$('bUndo').onclick = () => {
+  if (!M.rallies.length) return;
+  if (!confirm('마지막 랠리 기록을 지울까요?')) return;
+  M.rallies.pop(); draft = newDraft(); sel = null; changed();
+};
+$('bDelRally').onclick = () => {
+  if (draft.edit == null || !confirm(`#${draft.edit + 1} 랠리 기록을 지울까요?`)) return;
+  M.rallies.splice(draft.edit, 1); draft = newDraft(); sel = null; changed();
+};
+$('bCancelEdit').onclick = () => { draft = newDraft(); sel = null; render(); };
+function openRally(i) {
+  const r = M.rallies[i];
+  draft = { pos: clone(r.pos), atks: clone(r.atks), t: r.t, why: r.why, by: r.by != null ? r.win + ':' + r.by : '', edit: i };
+  sel = null; render(); seek(r.t);
+}
+
+/* ---------- 화면 그리기 ---------- */
+function render() {
+  const W = walk(), live = W.over ? null : W.cur;
+  // 점수판
+  if (document.activeElement !== $('homeName')) $('homeName').value = M.home.name;
+  if (document.activeElement !== $('awayName')) $('awayName').value = M.away.name;
+  $('setPoints').value = String(M.setPoints);
+  $('hSets').textContent = W.won[0]; $('aSets').textContent = W.won[1];
+  const shown = W.over ? W.sets[W.sets.length - 1] : W.cur;
+  $('hPts').textContent = shown[0]; $('aPts').textContent = shown[1];
+  $('setList').innerHTML = W.sets.map((s, i) => `<span>${i + 1}세트 ${s[0]}-${s[1]}</span>`).join('') + (live ? `<span class="cur">${W.set}세트 ${live[0]}-${live[1]}</span>` : '');
+  const st = $('status');
+  st.className = 'status' + (W.over ? ' over' : '');
+  st.textContent = W.over ? `경기 종료 · ${tName(W.winner)} 승리 (${W.won[0]}-${W.won[1]})` : `${W.set}세트 진행 중`;
+  // 보드 캡션·버튼
+  const cap = $('caption');
+  if (draft.edit != null) { const inf = W.info[draft.edit]; cap.className = 'caption edit'; cap.textContent = `#${draft.edit + 1} 랠리 수정 중` + (inf ? ` · ${inf.set}세트 ${inf.score[0]}:${inf.score[1]}` : ''); }
+  else { cap.className = 'caption'; cap.textContent = W.over ? '경기 종료 · 기록을 누르면 랠리별 위치를 볼 수 있습니다' : `새 랠리 · ${W.set}세트 ${W.cur[0]}:${W.cur[1]} 에서`; }
+  $('pHome').textContent = `${tName(0)} 득점` + (draft.edit != null ? ' (수정 저장)' : '');
+  $('pAway').textContent = `${tName(1)} 득점` + (draft.edit != null ? ' (수정 저장)' : '');
+  const lock = draft.edit == null && W.over;
+  $('pHome').disabled = $('pAway').disabled = lock;
+  $('editRow').classList.toggle('hide', draft.edit == null);
+  $('tLabel').textContent = draft.t != null ? '시작 ' + fmtT(draft.t) : '(비우면 득점 8초 전으로 기록)';
+  $('hint').innerHTML = sel != null
+    ? `<b style="color:var(--accent)">${sel >= 9 ? tName(1) : tName(0)} ${esc(pLabel(sel >= 9 ? 1 : 0, sel % 9))}</b> 선택됨 · 코트에서 공격이 떨어진 곳을 탭하세요 (같은 선수를 다시 탭하면 취소)`
+    : '선수를 끌어 위치를 옮기세요 · 선수를 <b>탭</b>한 뒤 코트를 탭하면 그 선수의 공격 화살표가 생깁니다';
+  // 공격 목록
+  $('atks').innerHTML = draft.atks.map((a, k) => `<div class="atk"><span class="who"><span class="${a.side ? 'dotA' : 'dotH'}"></span>${k + 1}. ${esc(pLabel(a.side, a.p))}</span>` +
+    Object.keys(RES).map(r => `<button class="chip${a.r === r ? ' on' : ''}" data-k="${k}" data-r="${r}">${RES[r]}</button>`).join('') +
+    `<button class="x" data-del="${k}" aria-label="삭제">✕</button></div>`).join('');
+  // 득점 방법·선수
+  $('whys').innerHTML = Object.keys(WHY).map(w => `<button class="chip${draft.why === w ? ' on' : ''}" data-why="${w}">${WHY[w]}</button>`).join(' ');
+  const opts = ['<option value="">자동 (마지막 공격 득점 선수)</option>'];
+  for (const s of [0, 1]) for (let p = 0; p < 9; p++) opts.push(`<option value="${s}:${p}">${esc(tName(s))} ${esc(pLabel(s, p))}</option>`);
+  $('by').innerHTML = opts.join(''); $('by').value = draft.by || '';
+  $('by').disabled = draft.why === 'err';
+  // 랠리 목록
+  $('rCount').textContent = M.rallies.length ? `${M.rallies.length}개` : '';
+  $('rBody').innerHTML = M.rallies.map((r, i) => {
+    const inf = W.info[i];
+    const who = r.by != null ? ' ' + esc(pLabel(r.win, r.by)) : '';
+    return `<tr class="click${draft.edit === i ? ' sel' : ''}" data-i="${i}"><td>${i + 1}</td><td>${inf ? inf.set : '-'}</td><td>${inf ? inf.score[0] + ':' + inf.score[1] : '경기 후'}</td>` +
+      `<td class="l"><span class="${r.win ? 'dotA' : 'dotH'}"></span>${esc(tName(r.win))}${who}</td><td class="l">${WHY[r.why]}${r.atks.length ? ' · 공격 ' + r.atks.length : ''}</td>` +
+      `<td>${r.t != null ? `<span class="tlink">${fmtT(r.t)}</span>` : ''}</td></tr>`;
+  }).join('') || '<tr><td colspan="6" class="muted" style="padding:14px">아직 기록이 없습니다. 영상을 보며 득점이 나면 보드에서 위치·공격을 정리하고 득점 버튼을 누르세요.</td></tr>';
+  const lst = $('rBody').closest('.list'); if (draft.edit == null) lst.scrollTop = lst.scrollHeight;
+  renderStats(W);
+  drawBoard();
+  $('saveState').textContent = (serverName ? `서버: 「${serverName}」` : '서버에 저장 안 됨') + (dirty ? ' · 저장 안 된 변경 있음 (이 기기에는 자동 보관)' : ' · 저장됨');
+  $('bDel').classList.toggle('hide', !serverName);
+}
+function renderStats(W) {
+  const { S, tot } = stats(W);
+  $('statsTitle').textContent = W.over ? '📊 경기 종료 · 선수별 최종 기록' : '📊 선수별 기록 (진행 중)';
+  $('stats').innerHTML = [0, 1].map(s => {
+    const T = S[s].reduce((a, x) => ({ pts: a.pts + x.pts, att: a.att + x.att, kill: a.kill + x.kill }), { pts: 0, att: 0, kill: 0 });
+    const rows = S[s].map((x, p) => `<tr><td class="l">${esc(pLabel(s, p))}</td><td>${x.pts}</td><td>${x.kill}/${x.att}</td>` +
+      `<td>${pct(x.kill, x.att)}%</td><td>${pct(x.att, tot[s])}%<span class="bar" style="width:${pct(x.att, tot[s])}%"></span></td></tr>`).join('');
+    return `<div><h3><span class="${s ? 'dotA' : 'dotH'}"></span>${esc(tName(s))}</h3><div class="list" style="max-height:none"><table>` +
+      `<thead><tr><th class="l">선수</th><th>득점</th><th>공격 성공/시도</th><th>성공률</th><th>점유율</th></tr></thead><tbody>${rows}` +
+      `<tr class="tot"><td class="l">팀 합계</td><td>${T.pts}</td><td>${T.kill}/${T.att}</td><td>${pct(T.kill, T.att)}%</td><td>${T.att ? '100%' : '0%'}</td></tr></tbody></table></div></div>`;
+  }).join('');
+}
+function renderRoster() {
+  $('roster').innerHTML = [0, 1].map(s => {
+    const t = s ? M.away : M.home;
+    return `<div><h3 style="margin:0 0 6px;font-size:14px"><span class="${s ? 'dotA' : 'dotH'}"></span><span class="rn${s}">${esc(tName(s))}</span></h3><table><thead><tr><th>자리</th><th>등번호</th><th class="l">이름</th></tr></thead><tbody>` +
+      t.players.map((p, i) => `<tr><td class="muted">${i + 1}</td><td style="width:70px"><input data-s="${s}" data-p="${i}" data-f="no" maxlength="3" value="${esc(p.no)}"></td>` +
+        `<td><input data-s="${s}" data-p="${i}" data-f="name" maxlength="12" placeholder="이름" value="${esc(p.name)}"></td></tr>`).join('') + '</tbody></table></div>';
+  }).join('');
+}
+$('roster').addEventListener('input', e => {
+  const t = e.target; if (!t.dataset.f) return;
+  (t.dataset.s === '1' ? M.away : M.home).players[+t.dataset.p][t.dataset.f] = t.value.trim();
+  changed();
+});
+$('atks').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.del != null) { draft.atks.splice(+b.dataset.del, 1); render(); return; }
+  const a = draft.atks[+b.dataset.k]; a.r = b.dataset.r;
+  if (a.r === 'kill') { draft.why = 'atk'; draft.by = a.side + ':' + a.p; }
+  else if (a.r === 'blk') { draft.why = 'blk'; draft.by = ''; }
+  else if (a.r === 'err') { draft.why = 'err'; draft.by = ''; }
+  render();
+});
+$('whys').addEventListener('click', e => { const b = e.target.closest('[data-why]'); if (!b) return; draft.why = b.dataset.why; if (draft.why === 'err') draft.by = ''; render(); });
+$('rBody').addEventListener('click', e => { const tr = e.target.closest('tr[data-i]'); if (tr) openRally(+tr.dataset.i); });
+const nameInput = (id, s) => $(id).addEventListener('input', () => {
+  (s ? M.away : M.home).name = $(id).value.trim(); changed();
+  const h = document.querySelector('.rn' + s); if (h) h.textContent = tName(s);
+});
+nameInput('homeName', 0); nameInput('awayName', 1);
+$('setPoints').onchange = () => { M.setPoints = +$('setPoints').value; changed(); };
+$('mName').addEventListener('input', persist);
+
+/* ---------- 서버 저장 ---------- */
+let toastT = 0;
+function toast(m) { const t = $('toast'); t.textContent = m; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 1800); }
+async function api(method, path, body) {
+  const r = await fetch(API + path, { method, cache: 'no-store', headers: body ? { 'Content-Type': 'application/json' } : undefined, body: body ? JSON.stringify(body) : undefined });
+  let j = {}; try { j = await r.json(); } catch (e) {}
+  return { status: r.status, ok: r.ok, body: j };
+}
+const sheet = $('sheet'), box = $('box');
+function h(tag, props, ...kids) { const e = document.createElement(tag); Object.assign(e, props || {}); e.append(...kids); return e; }
+function openSheet(...kids) { box.replaceChildren(...kids); sheet.classList.remove('hide'); }
+function closeSheet() { sheet.classList.add('hide'); box.replaceChildren(); }
+sheet.addEventListener('click', e => { if (e.target === sheet) closeSheet(); });
+function askPw(title, text) {
+  return new Promise(res => {
+    const pw = h('input', { type: 'password', placeholder: '비밀번호 (4자 이상)', maxLength: 64, autocomplete: 'off' });
+    const ok = () => { if (pw.value.length >= 4) { closeSheet(); res(pw.value); } else toast('비밀번호는 4자 이상'); };
+    pw.onkeydown = e => { if (e.key === 'Enter') ok(); };
+    openSheet(h('h2', { textContent: title }), h('p', { textContent: text }), pw,
+      h('div', { className: 'row' }, h('button', { className: 'btn save', textContent: '확인', onclick: ok }), h('button', { className: 'btn', textContent: '취소', onclick: () => { closeSheet(); res(null); } })));
+    pw.focus();
+  });
+}
+function autoName() {
+  const d = new Date(), ds = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return `${ds} ${tName(0)} vs ${tName(1)}`.slice(0, 40);
+}
+$('bSave').onclick = async () => {
+  let name = $('mName').value.trim().replace(/\s+/g, ' ');
+  if (!name) { name = autoName(); $('mName').value = name; }
+  if (/[\/\\]/.test(name)) { toast('경기 이름에 / \\ 는 쓸 수 없습니다'); return; }
+  const create = name !== serverName;
+  let pw = !create && pws[name];
+  if (!pw) pw = await askPw(create ? '새 경기로 서버에 저장' : `「${name}」 비밀번호`,
+    create ? `「${name}」 이름으로 저장합니다. 정한 비밀번호는 이 경기를 고치거나 지울 때 필요하며, 잊으면 되찾을 수 없습니다. 보는 것은 누구나 가능합니다.`
+           : '이 경기를 저장할 때 정한 비밀번호를 입력하세요.');
+  if (!pw) return;
+  const b = $('bSave'); b.disabled = true;
+  let r; try { r = await api('PUT', '/matches/' + encodeURIComponent(name), { password: pw, create, data: M }); } catch (e) { r = { ok: false, status: 0, body: {} }; }
+  b.disabled = false;
+  if (!r.ok) {
+    if (r.status === 401) { delete pws[name]; lsSet(PW_KEY, pws); }
+    toast(r.status === 401 ? '비밀번호가 맞지 않습니다' : r.status === 409 ? '같은 이름의 경기가 이미 있습니다 · 이름을 바꾸세요'
+      : r.status === 413 ? '기록이 너무 큽니다' : r.status === 403 ? '저장 가능한 경기 수를 넘었습니다' : r.status === 404 ? '서버에 이 경기가 없습니다'
+      : r.status === 400 ? '저장할 수 없는 기록입니다' : '서버 저장 실패 · 연결을 확인하세요');
+    return;
+  }
+  pws[name] = pw; lsSet(PW_KEY, pws);
+  serverName = name; dirty = false; persist(); render();
+  toast(`「${name}」 서버에 저장했습니다`);
+};
+$('bList').onclick = async () => {
+  openSheet(h('h2', { textContent: '서버의 경기 목록' }), h('p', { textContent: '불러오는 중…' }));
+  let r; try { r = await api('GET', '/matches'); } catch (e) { r = { ok: false }; }
+  if (sheet.classList.contains('hide')) return;
+  const kids = [h('h2', { textContent: '서버의 경기 목록' })];
+  if (!r.ok) kids.push(h('p', { textContent: '서버에 연결할 수 없어 목록을 불러오지 못했습니다.' }));
+  else if (!(r.body.matches || []).length) kids.push(h('p', { textContent: '저장된 경기가 없습니다.' }));
+  else for (const m of r.body.matches) {
+    const it = h('button', { className: 'item', onclick: () => loadMatch(m.name) });
+    it.append(h('b', { textContent: m.name }), h('span', { className: 'muted', textContent: `${m.home || '우리 팀'} vs ${m.away || '상대 팀'} · 세트 ${m.score || '0-0'} · ${m.updatedAt ? new Date(m.updatedAt).toLocaleString('ko-KR') : ''}` }));
+    kids.push(it);
+  }
+  kids.push(h('button', { className: 'btn', textContent: '닫기', onclick: closeSheet }));
+  openSheet(...kids);
+};
+async function loadMatch(name) {
+  if (dirty && M.rallies.length && !confirm('저장하지 않은 기록이 있습니다. 버리고 불러올까요?')) return;
+  let r; try { r = await api('GET', '/matches/' + encodeURIComponent(name)); } catch (e) { r = { ok: false }; }
+  if (!r.ok) { toast('경기를 불러오지 못했습니다'); return; }
+  M = r.body.data; serverName = r.body.name; dirty = false; $('mName').value = serverName;
+  draft = newDraft(); sel = null; closeSheet(); persist(); renderRoster(); render();
+  $('vUrl').value = M.video || ''; if (M.video) loadVideo(M.video, true);
+  toast(`「${serverName}」 불러왔습니다`);
+}
+$('bNew').onclick = () => {
+  if (dirty && M.rallies.length && !confirm('저장하지 않은 기록이 있습니다. 새 경기를 시작할까요? (팀 이름과 명단은 그대로 둡니다)')) return;
+  M = { ...blank(), home: M.home, away: M.away, setPoints: M.setPoints };
+  serverName = ''; dirty = false; $('mName').value = ''; $('vUrl').value = '';
+  draft = newDraft(); sel = null; persist(); render();
+};
+$('bDel').onclick = async () => {
+  const name = serverName; if (!name) return;
+  const pw = await askPw(`「${name}」 서버에서 삭제`, '서버에 저장된 이 경기 기록을 지웁니다. 되돌릴 수 없습니다. 이 기기의 화면 기록은 남습니다.');
+  if (!pw) return;
+  let r; try { r = await api('DELETE', '/matches/' + encodeURIComponent(name), { password: pw }); } catch (e) { r = { ok: false, status: 0 }; }
+  if (!r.ok && r.status !== 404) { toast(r.status === 401 ? '비밀번호가 맞지 않습니다' : '삭제하지 못했습니다'); return; }
+  delete pws[name]; lsSet(PW_KEY, pws); serverName = ''; dirty = true; persist(); render();
+  toast(`「${name}」 서버에서 삭제했습니다`);
+};
+
+renderRoster(); render();
+$('vUrl').value = M.video || '';
+if (M.video) loadVideo(M.video, true);
+})();
+</script>
+</body>
+</html>
