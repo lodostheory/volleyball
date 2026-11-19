@@ -46,9 +46,11 @@ const TEAMS=[
  {name:'GERMANY',jersey:'#2a2a2a',shorts:'#f2c200',trim:'#e8343a'},
  {name:'ITALY',jersey:'#1c9c4b',shorts:'#f4f4f4',trim:'#ffffff'}];
 const LEVELS=[
- {name:'EASY',speed:400,miss:.5,block:.25,err:110},
- {name:'NORMAL',speed:470,miss:.3,block:.5,err:70},
- {name:'HARD',speed:540,miss:.16,block:.7,err:40}];
+ // speed: CPU 이동 속도(사람은 520), miss: 스파이크를 놓칠 확률, block: 블로킹 시도 확률, err: 타구 방향 오차,
+ // slow: CPU 스파이크 비행시간에 더하는 초(클수록 공이 느려 받기 쉬움)
+ {name:'EASY',speed:330,miss:.65,block:.1,err:150,slow:.2},
+ {name:'NORMAL',speed:400,miss:.45,block:.28,err:105,slow:.11},
+ {name:'HARD',speed:470,miss:.28,block:.5,err:70,slow:.04}];
 const MODES=['1P vs CPU','2P VS','CPU vs CPU'];
 const clamp=(v,a,b)=>v<a?a:v>b?b:v, rnd=()=>Math.random(), rs=()=>Math.random()*2-1;
 const LA='◀︎',RA='▶︎';   // ◀ ▶ (이모지가 아닌 글자 모양으로)
@@ -202,7 +204,7 @@ function tryAct(p){
     if(Math.abs(dx)<120&&hy>60&&hy<300){
       const e=rs()*(Math.abs(hy-200)/100*130+aiE);
       state='rally';
-      if(air){smash(NET_X+d*(m.back?380:m.fwd?720:560)+e,.72);p.pose='spike';sfx.spike();hit(p,'spike');}
+      if(air){smash(NET_X+d*(m.back?380:m.fwd?720:560)+e,.72+(tm.human?0:L.slow));p.pose='spike';sfx.spike();hit(p,'spike');}
       else{launch(NET_X+d*(m.back?300:m.fwd?720:520)+e,GROUND-BR,NET_TOP-170);p.pose='spike';sfx.bump();hit(p,'serve');}
       tm.touches=3;ball.hits=0;ball.side=ball.x<NET_X;
       return true;
@@ -217,7 +219,7 @@ function tryAct(p){
       if(m.up){launch(NET_X+d*(200+rnd()*70),GROUND-BR,ball.y-150);p.pose='spike';sfx.set();hit(p,'feint');}
       else{
         const off=Math.abs(hy-215)/80,e=rs()*(25+off*25+aiE);
-        smash(NET_X+d*(m.down?300:m.fwd?700:480)+e,.40+Math.min(.3,off*.15));
+        smash(NET_X+d*(m.down?300:m.fwd?700:480)+e,.40+Math.min(.3,off*.15)+(tm.human?0:L.slow));
         p.pose='spike';sfx.spike();hit(p,'spike');
       }
       return true;
