@@ -40,6 +40,11 @@ DATA = HERE / 'data'
 VID_DIR, RES_DIR, LOCAL_DIR = DATA / 'videos', DATA / 'results', HERE / 'videos'
 ALLOWED_ORIGIN = re.compile(r'^(https://lodostheory\.github\.io|https?://(localhost|127\.0\.0\.1)(:\d+)?)$')
 VIDEO_EXT = {'.mp4', '.mkv', '.mov', '.webm', '.avi', '.m4v'}
+# 사이트 화면도 이 서버에서 /app/ 으로 제공한다. 공개 사이트(https)에서 이 PC 로의 접근을 브라우저가 막아도
+# 화면과 서버가 같은 주소가 되어 그대로 동작한다. 저장소 맨 위 폴더의 파일만, 정해진 종류만 내준다
+SITE = HERE.parent
+SITE_TYPES = {'.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.json': 'application/json; charset=utf-8',
+              '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon'}
 
 videos: dict[str, dict] = {}
 jobs: dict[str, dict] = {}
@@ -271,11 +276,23 @@ class Handler(BaseHTTPRequestHandler):
         q = parse_qs(u.query)
         try:
             if not parts:
-                html = (f'<meta charset="utf-8"><title>배구 영상 인식 서버</title><body style="font-family:sans-serif;padding:24px">'
+                html = (f'<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>배구 영상 인식 서버</title>'
+                        f'<body style="font-family:sans-serif;padding:24px;line-height:1.6;background:#0b1d2a;color:#eef6fb">'
                         f'<h2>🏐 배구 영상 인식 서버가 실행 중입니다 (포트 {PORT})</h2>'
-                        f'<p><a href="https://lodostheory.github.io/vollyball/#analysis">VOLLYBALL MANIA 「경기 분석」 탭</a>에서 '
-                        f'「🤖 AI 영상 인식」을 열어 사용하세요. 이 창(검은 콘솔)을 닫으면 서버가 꺼집니다.</p>')
+                        f'<p><a href="/app/#analysis" style="display:inline-block;padding:12px 18px;border-radius:10px;background:#ffb020;color:#2a1a00;'
+                        f'font-weight:800;text-decoration:none">▶ 경기 분석 화면 열기 (이 PC 서버에서)</a></p>'
+                        f'<p>이 주소로 열면 화면과 분석 서버가 같은 주소라 브라우저 권한 없이 「🤖 AI 영상 인식」이 바로 연결됩니다.<br>'
+                        f'<a href="https://lodostheory.github.io/vollyball/#analysis" style="color:#ffb020">공개 사이트</a>에서도 쓸 수 있지만, '
+                        f'브라우저가 공개 사이트의 PC 접근을 막으면 연결되지 않습니다.<br>서버를 실행한 창을 닫으면 서버가 꺼집니다.</p>')
                 return self._send(200, html.encode('utf-8'), 'text/html; charset=utf-8')
+            if parts[0] == 'app':
+                if u.path == '/app':
+                    return self._send(301, b'', 'text/plain', {'Location': '/app/'})
+                name = parts[1] if len(parts) > 1 else 'index.html'
+                f = SITE / name
+                if len(parts) > 2 or not re.fullmatch(r'[\w.-]+', name) or f.suffix.lower() not in SITE_TYPES or not f.is_file():
+                    return self._err(404, 'not_found')
+                return self._send(200, f.read_bytes(), SITE_TYPES[f.suffix.lower()])
             if parts == ['health']:
                 busy = next((j['id'] for j in jobs.values() if j['status'] in ('running', 'queued')), None)
                 return self._json({'ok': True, 'version': VERSION, 'device': DEVICE, 'gpu': GPU, 'busy': busy,
