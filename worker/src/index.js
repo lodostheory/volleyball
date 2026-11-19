@@ -66,19 +66,42 @@ function cleanMatch(d) {
   const rallies = [];
   for (const r of d.rallies) {
     if (!r || !Array.isArray(r.pos) || r.pos.length !== 18 || !r.pos.every(pt) || (r.win !== 0 && r.win !== 1)) return null;
-    if (!Array.isArray(r.atks) || r.atks.length > 30) return null;
-    const atks = [];
-    for (const a of r.atks) {
-      if (!a || (a.side !== 0 && a.side !== 1) || !num(a.p, 0, 8) || !pt(a.from) || !pt(a.to) || !['kill', 'err', 'blk', 'cont'].includes(a.r)) return null;
-      atks.push({ side: a.side, p: a.p, from: a.from, to: a.to, r: a.r });
-    }
+    const t = num(r.t, 0, 1e6) ? r.t : null;
+    let acts;
+    if (Array.isArray(r.acts)) {               // v2: 동작 단위 기록 (스카우팅 코드)
+      if (r.acts.length > 80) return null;
+      acts = r.acts.map(cleanAct);
+      if (acts.some(a => !a)) return null;
+    } else if (Array.isArray(r.atks)) {        // v1: 공격 화살표만 있던 예전 형식 → 공격 동작으로
+      if (r.atks.length > 30) return null;
+      acts = [];
+      for (const a of r.atks) {
+        if (!a || (a.side !== 0 && a.side !== 1) || !idx(a.p) || !pt(a.from) || !pt(a.to) || !(a.r in OLD_RESULT)) return null;
+        acts.push({ side: a.side, p: a.p, sk: 'A', ev: OLD_RESULT[a.r], t, from: a.from, to: a.to });
+      }
+    } else return null;
     rallies.push({
-      t: num(r.t, 0, 1e6) ? r.t : null, pos: r.pos, atks, win: r.win,
+      t, pos: r.pos, acts, win: r.win,
       why: ['atk', 'blk', 'srv', 'err'].includes(r.why) ? r.why : 'atk',
-      by: num(r.by, 0, 8) ? r.by : null,
+      by: idx(r.by) ? r.by : null,
     });
   }
-  return { v: 1, home, away, video: str(d.video, 300), setPoints: [15, 21, 25].includes(d.setPoints) ? d.setPoints : 21, rallies };
+  return { v: 2, home, away, video: str(d.video, 300), setPoints: [15, 21, 25].includes(d.setPoints) ? d.setPoints : 21, rallies };
+}
+const idx = v => Number.isInteger(v) && v >= 0 && v <= 8;
+const OLD_RESULT = { kill: '#', err: '=', blk: '/', cont: '-' };
+// 동작: S 서브 · R 리시브 · E 토스 · A 공격 · B 블로킹 · D 디그 · F 프리볼 / 평가: # + ! - / =
+function cleanAct(a) {
+  if (!a || typeof a !== 'object' || (a.side !== 0 && a.side !== 1) || !idx(a.p)) return null;
+  if (typeof a.sk !== 'string' || a.sk.length !== 1 || !'SREABDF'.includes(a.sk)) return null;
+  if (typeof a.ev !== 'string' || a.ev.length !== 1 || !'#+!-/='.includes(a.ev)) return null;
+  const o = { side: a.side, p: a.p, sk: a.sk, ev: a.ev, t: num(a.t, 0, 1e6) ? a.t : null };
+  for (const f of ['from', 'to']) {
+    if (a[f] == null) continue;
+    if (!pt(a[f])) return null;
+    o[f] = a[f];
+  }
+  return o;
 }
 function matchScore(m) {          // 세트 스코어 "2-1" (목록 표시용)
   const s = [0, 0]; let p = [0, 0];
