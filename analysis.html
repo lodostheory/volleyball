@@ -21,10 +21,10 @@ button{border:0;cursor:pointer}
 button:disabled{opacity:.45;cursor:default}
 input,select{background:#0b1d2a;border:1.5px solid var(--line);border-radius:9px;height:38px;padding:0 10px;min-width:0}
 input:focus,select:focus{outline:none;border-color:var(--accent)}
-.layout{display:grid;gap:12px;grid-template-areas:"bar" "score" "video" "scout" "board" "rallies" "stats" "roster"}
+.layout{display:grid;gap:12px;grid-template-areas:"bar" "score" "video" "ai" "scout" "board" "rallies" "stats" "roster"}
 @media (min-width:980px){
   .layout{grid-template-columns:minmax(0,1.2fr) minmax(360px,1fr);
-    grid-template-areas:"bar board" "score board" "video board" "scout board" "rallies board" "stats stats" "roster roster";align-items:start}
+    grid-template-areas:"bar board" "score board" "video board" "ai board" "scout board" "rallies board" "stats stats" "roster roster";align-items:start}
   .a-board{position:sticky;top:10px}
 }
 .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px;min-width:0}
@@ -138,6 +138,27 @@ tr.zero td{color:#5f7f92}
 .roster table input{height:32px;width:100%}
 .roster td{padding:3px}
 
+/* AI 영상 인식 */
+details.aibox>summary{cursor:pointer;font-weight:800;font-size:15px}
+details.aibox>summary small{font-weight:600;color:var(--muted);font-size:12px}
+.aistep{margin-top:10px;padding-top:10px;border-top:1px dashed var(--line)}
+.aistep h4{margin:0 0 6px;font-size:13.5px}
+.aiframe{position:relative;margin-top:8px;background:repeating-linear-gradient(45deg,#0b1d2a 0 10px,#10283a 10px 20px);border-radius:8px;overflow:hidden;cursor:crosshair;user-select:none;padding:7% 9%}
+.aiframe img{display:block;width:100%;height:auto;pointer-events:none}
+.aiframe svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.prog{height:8px;border-radius:4px;background:#0b1d2a;border:1px solid var(--line);overflow:hidden;margin-top:6px}
+.prog div{height:100%;width:0;background:var(--ok);transition:width .4s}
+.sdot{display:inline-block;width:9px;height:9px;border-radius:50%;background:#5f7f92;margin-right:5px}
+.sdot.on{background:var(--ok)}
+.cands{max-height:220px;overflow:auto;display:flex;flex-direction:column;gap:3px;margin-top:6px}
+.cands button{text-align:left;background:var(--panel2);border-radius:8px;padding:5px 9px;font-size:12.5px}
+.cands button.done{opacity:.5} .cands button.skip{opacity:.35;text-decoration:line-through}
+.cands button.on{outline:1.5px solid var(--accent);color:var(--accent);opacity:1}
+.aimap{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:4px 10px;margin-top:6px}
+.aimap label{display:flex;gap:6px;align-items:center;font-size:12px}
+.aimap select{height:30px;font-size:12px;flex:1}
+.aibanner{background:#2b2410;border:1.5px solid var(--accent);border-radius:10px;padding:8px 10px;margin-bottom:8px;font-size:13px;font-weight:700;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+
 .sheet{position:fixed;inset:0;z-index:8;background:#000a;display:flex;align-items:center;justify-content:center;padding:16px}
 .sheet .box{width:min(100%,460px);max-height:84vh;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px}
 .sheet h2{margin:0 0 10px;font-size:17px}
@@ -209,8 +230,58 @@ tr.zero td{color:#5f7f92}
     </div>
   </section>
 
+  <section class="card" style="grid-area:ai">
+    <details class="aibox" id="aiBox">
+      <summary>🤖 AI 영상 인식 <small>PC 에서 분석 서버를 켜면 영상 속 터치 장면과 선수 위치를 자동으로 찾아 줍니다</small></summary>
+      <div class="row" style="margin-top:8px">
+        <input id="aiUrl" class="grow mono" placeholder="http://127.0.0.1:8765">
+        <button class="btn" id="aiPing">연결 확인</button>
+        <span class="muted" id="aiState"></span>
+      </div>
+      <div class="muted" id="aiHelp" style="margin-top:6px;line-height:1.55">이 기능은 PC 에서만 됩니다. 저장소의 <span class="mono">analyzer\run_server.bat</span> 를 실행하면(처음 한 번은 설치에 몇 분) 서버가 켜집니다. 자세한 방법은 <a href="https://github.com/lodostheory/vollyball/tree/main/analyzer" target="_blank" rel="noopener" style="color:var(--accent)">analyzer 안내</a>. 본인 또는 권한이 있는 영상만 분석하세요.</div>
+      <div id="aiSteps" class="hide">
+        <div class="aistep">
+          <h4>1. 영상 받기</h4>
+          <div class="row"><button class="btn" id="aiFetch">위에서 불러온 유튜브 영상 받기</button><span class="muted" id="aiVid"></span></div>
+          <div class="prog hide" id="aiVidBarBox"><div id="aiVidBar"></div></div>
+        </div>
+        <div class="aistep" id="aiStep2">
+          <h4>2. 코트 모서리 찍기</h4>
+          <div class="row"><button class="btn sm" id="aiFrame">지금 영상 시각의 화면 가져오기</button><button class="btn sm" id="aiClear">다시 찍기</button><span class="muted" id="aiCornerState"></span></div>
+          <div class="muted" style="margin-top:4px;line-height:1.55">코트 <b>바닥 선의 네 모서리</b>를 ① 먼 쪽 왼쪽 → ② 먼 쪽 오른쪽 → ③ 가까운 쪽 오른쪽 → ④ 가까운 쪽 왼쪽 순서로 누르세요. 모서리가 화면 밖이면 둘레의 빗금 여백에 짐작해서 찍으면 됩니다. 4개를 찍으면 계산된 <b style="color:#ff6b6b">네트 위치(빨간 선)</b>가 그려지니, 실제 네트 바로 아래 바닥과 겹치는지 확인하세요. 카메라는 엔드라인 뒤 높은 곳에 고정된 영상이 가장 정확합니다.</div>
+          <div class="aiframe hide" id="aiFrameBox"><img id="aiImg" alt="코트 화면"><svg id="aiPoly" preserveAspectRatio="none"></svg></div>
+        </div>
+        <div class="aistep">
+          <h4>3. 분석</h4>
+          <div class="opts" style="margin-top:0">
+            <span>우리 팀 <select id="aiNear"><option value="home">가까운 쪽(화면 아래)</option><option value="away">먼 쪽(화면 위)</option></select></span>
+            <span>규격 <select id="aiCourt"><option value="9">9인제 21×10.5m</option><option value="6">6인제 18×9m</option></select></span>
+            <span>초당 <select id="aiFps"><option>5</option><option>10</option><option>15</option><option>30</option></select>장</span>
+            <span>모델 <select id="aiModel"><option value="n">빠름</option><option value="s">보통</option><option value="m">정확(느림)</option></select></span>
+            <span>구간 <select id="aiRange"><option value="all">영상 전체</option><option value="5">지금부터 5분</option><option value="15">지금부터 15분</option><option value="30">지금부터 30분</option></select></span>
+            <label><input type="checkbox" id="aiTiles" style="height:auto"> 먼 공 찾기 강화(느림)</label>
+          </div>
+          <div class="row" style="margin-top:8px"><button class="btn primary" id="aiRun">분석 시작</button><button class="btn" id="aiCancel">취소</button><span class="muted" id="aiJob"></span></div>
+          <div class="prog hide" id="aiBarBox"><div id="aiBar"></div></div>
+        </div>
+        <div class="aistep hide" id="aiResult">
+          <h4>4. 결과 검토 <small class="muted" id="aiSum"></small></h4>
+          <div class="row">
+            <button class="btn primary" id="aiReview">▶ 후보 검토 시작</button>
+            <button class="btn" id="aiExcel">⬇ 엑셀 리포트</button>
+            <label class="muted"><input type="checkbox" id="aiAutoPos" style="height:auto"> 후보마다 보드에 선수 위치 반영</label>
+          </div>
+          <div class="muted" style="margin-top:6px;line-height:1.55">후보를 누르면 그 장면을 영상으로 보여 주고, 패드에 AI 가 추정한 팀·동작을 미리 골라 둡니다. 선수 번호와 평가만 누르면(또는 코드 입력) 그 장면 시각으로 기록되고 다음 후보로 넘어갑니다. 한 번 고른 선수는 그 트랙에 연결되어 다음부터 자동으로 골라집니다.</div>
+          <div class="cands" id="aiCands"></div>
+          <details style="margin-top:8px"><summary class="muted" style="cursor:pointer">트랙 ↔ 선수 연결 (AI 의 트랙 번호 T 를 실제 선수에 연결)</summary><div class="aimap" id="aiMap"></div></details>
+        </div>
+      </div>
+    </details>
+  </section>
+
   <section class="card" style="grid-area:scout">
     <h2>⌨ 동작 기록 <small>코드를 치거나 아래 패드를 누르세요 · 득점 동작이 들어가면 점수가 자동으로 올라갑니다</small></h2>
+    <div class="aibanner hide" id="aiBanner"><span id="aiBannerText"></span><button class="btn sm" id="aiSkip">⏭ 건너뛰기</button><button class="btn sm" id="aiStop">■ 검토 그만</button></div>
     <div class="code">
       <input id="code" class="mono" lang="en" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="done" placeholder="예: 7S+  a12R-  a5A#46">
       <button class="btn" id="bUndoAct" title="마지막 입력 되돌리기 (빈 칸에서 Backspace)">↶</button>
@@ -447,6 +518,8 @@ function makeAct(r) {
       a.to = zoneC(1 - r.side, ez);
     }
   } else if (zs.length) a.from = zoneC(r.side, zs[0]);
+  const ev = aiEvent();              // AI 후보를 검토 중이면 그 장면의 시각·선수 위치로 기록
+  if (ev) { a.t = ev.t; if (aiSideIdx(ev.side) === r.side && !a.from) a.from = aiBoardPt(ev.x, ev.y); }
   return a;
 }
 
@@ -529,6 +602,7 @@ function commitInput() {
     const a = makeAct(r), res = addAct(a);
     if (!res) break;
     if (res === 'add') padAfter(a);
+    if (aiCur != null) aiAfter(a);
     done.push(codeOf(a) + (res === 'point' ? ` → ${tName(pointOf(a))} 득점` : res === 'attach' ? ' → 방금 랠리에 붙음' : ''));
   }
   msg = done.length ? { text: '✓ ' + done.join(' · '), cls: done.some(d => d.includes('득점')) ? 'pt' : 'ok' } : null;
@@ -586,6 +660,7 @@ $('pad').addEventListener('click', e => {
     if (!pad.sk) { toast('동작을 고르세요'); return; }
     const a = makeAct({ side: pad.side, p: pad.p, sk: pad.sk, ev: b.dataset.ev, z: '' }), res = addAct(a);
     if (res === 'add') padAfter(a);
+    if (res && aiCur != null) aiAfter(a);
     if (res) msg = { text: '✓ ' + codeOf(a) + (res === 'point' ? ` → ${tName(pointOf(a))} 득점` : res === 'attach' ? ' → 방금 랠리에 붙음' : ''), cls: res === 'add' ? 'ok' : 'pt' };
   }
   render();
@@ -812,7 +887,7 @@ function playClips(i) {
   if (!ytOk()) { toast('먼저 영상을 불러오세요'); return; }
   const list = playable();
   if (!list.length) { toast('영상 시각이 기록된 장면이 없습니다'); return; }
-  stopClips(); clip = { list, i: Math.max(0, Math.min(i || 0, list.length - 1)), end: 0, at: 0, timer: setInterval(tickClip, 200) }; startClip();
+  stopClips(); aiStopSpan(); clip = { list, i: Math.max(0, Math.min(i || 0, list.length - 1)), end: 0, at: 0, timer: setInterval(tickClip, 200) }; startClip();
 }
 function startClip() { const t = tOf(clip.list[clip.i]); clip.end = t + opt.post; clip.at = Date.now(); seek(t - opt.pre, true); renderClips(); }
 function tickClip() {
@@ -950,6 +1025,7 @@ function render() {
   drawBoard();
   $('saveState').textContent = (serverName ? `서버: 「${serverName}」` : '서버에 저장 안 됨') + (dirty ? ' · 저장 안 된 변경 있음 (이 기기에는 자동 보관)' : ' · 저장됨');
   $('bDel').classList.toggle('hide', !serverName);
+  renderAI();
   persist();
 }
 function renderRoster() {
@@ -1052,7 +1128,7 @@ $('bList').onclick = async () => {
   kids.push(h('button', { className: 'btn', textContent: '닫기', onclick: closeSheet }));
   openSheet(...kids);
 };
-function resetView() { draft = newDraft(); sel = null; pend = null; undo = []; flt = null; overlay = false; stopClips(); Object.assign(pad, { side: 0, p: null, sk: 'S' }); msg = null; }
+function resetView() { draft = newDraft(); sel = null; pend = null; undo = []; flt = null; overlay = false; stopClips(); aiCur = null; Object.assign(pad, { side: 0, p: null, sk: 'S' }); msg = null; }
 async function loadMatch(name) {
   if (dirty && M.rallies.length && !confirm('저장하지 않은 기록이 있습니다. 버리고 불러올까요?')) return;
   let r; try { r = await api('GET', '/matches/' + encodeURIComponent(name)); } catch (e) { r = { ok: false }; }
@@ -1078,7 +1154,265 @@ $('bDel').onclick = async () => {
   toast(`「${name}」 서버에서 삭제했습니다`);
 };
 
-window.vbAnalysis = { parseToken, toLatin, buildCsv, get M() { return M; } };   // 점검용
+/* ---------- 🤖 AI 영상 인식: PC 에서 돌아가는 분석 서버(analyzer/server.py)와 연결 ----------
+   서버가 찾은 터치 후보(시각·코트 쪽·동작 추정·트랙 번호·그 순간 선수 위치)를 하나씩 영상으로 확인하며
+   패드·코드로 번호와 평가를 확정한다. 확정한 선수는 그 트랙에 연결되어 다음 후보에서 자동으로 골라진다 */
+const AI_KEY = 'vollyball-mania.analysis.ai';
+const ai = Object.assign({ url: 'http://127.0.0.1:8765', open: false, vid: null, corners: [], frameT: 0, near: 'home', court: '9', fps: 10, model: 's',
+  range: 'all', tiles: false, autoPos: true, job: null, done: {}, map: {} }, lsGet(AI_KEY, {}));
+let aiInfo = null, aiVideo = null, aiJob = null, aiRes = null, aiCur = null, aiImgUrl = null, aiSpan = null, aiPollT = 0, aiVidT = 0, aiCandKey = '';
+const aiSave = () => lsSet(AI_KEY, ai);
+const aiBase = () => (ai.url || 'http://127.0.0.1:8765').trim().replace(/\/+$/, '');
+async function aiApi(method, path, body) {
+  const ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), 20000);
+  try {
+    const r = await fetch(aiBase() + path, { method, signal: ctl.signal, cache: 'no-store', headers: body ? { 'Content-Type': 'application/json' } : undefined, body: body ? JSON.stringify(body) : undefined });
+    let j = {}; try { j = await r.json(); } catch (e) {}
+    return { ok: r.ok, status: r.status, body: j };
+  } finally { clearTimeout(tm); }
+}
+const aiSideIdx = s => (s === 'near') === (ai.near === 'home') ? 0 : 1;      // 코트 쪽(near/far) → 우리(0)/상대(1)
+function aiBoardPt(x, y) {                                                      // 실제 코트(m) → 보드 좌표 (상대 위 · 우리 아래)
+  const c = aiRes ? aiRes.court : { W: 10.5, L: 21 };
+  let bx = x / c.W * 100, by = y / c.L * 200;
+  if (ai.near !== 'home') { bx = 100 - bx; by = 200 - by; }
+  return clampP([bx, by]);
+}
+function aiEvent() { return aiCur != null && aiRes && aiRes.events[aiCur] ? aiRes.events[aiCur] : null; }
+async function aiPing(quiet) {
+  ai.url = $('aiUrl').value.trim() || 'http://127.0.0.1:8765'; aiSave();
+  $('aiState').textContent = '연결 중…';
+  try { const r = await aiApi('GET', '/health'); aiInfo = r.ok ? r.body : null; } catch (e) { aiInfo = null; }
+  if (!aiInfo) { if (!quiet) toast('분석 서버에 연결할 수 없습니다 · PC 에서 run_server.bat 을 켜 주세요'); renderAI(); return; }
+  if (ai.vid) { try { const r = await aiApi('GET', '/videos/' + ai.vid); aiVideo = r.ok ? r.body : null; } catch (e) { aiVideo = null; } }
+  if (aiVideo && aiVideo.status === 'downloading') aiWaitVideo();
+  if (aiVideo && aiVideo.status === 'ready' && !aiImgUrl) aiGetFrame(ai.frameT || 0);
+  if (ai.job) aiWatch();
+  renderAI();
+}
+async function aiFetch() {
+  if (!ytId(M.video || '')) { toast('먼저 위 「경기 영상」에서 유튜브 영상을 불러오세요'); return; }
+  let r; try { r = await aiApi('POST', '/videos', { url: M.video }); } catch (e) { r = { ok: false, body: {} }; }
+  if (!r.ok) { toast(r.body.error || '영상 받기를 시작하지 못했습니다'); return; }
+  aiVideo = r.body;
+  if (ai.vid !== aiVideo.id) { ai.vid = aiVideo.id; ai.corners = []; ai.job = null; aiRes = null; aiCur = null; if (aiImgUrl) { URL.revokeObjectURL(aiImgUrl); aiImgUrl = null; } }
+  aiSave(); renderAI();
+  if (aiVideo.status === 'ready') aiGetFrame(vNow() || 0); else aiWaitVideo();
+}
+function aiWaitVideo() {
+  clearTimeout(aiVidT);
+  aiVidT = setTimeout(async () => {
+    try { const r = await aiApi('GET', '/videos/' + ai.vid); if (r.ok) aiVideo = r.body; } catch (e) {}
+    renderAI();
+    if (aiVideo && aiVideo.status === 'downloading') aiWaitVideo();
+    else if (aiVideo && aiVideo.status === 'ready') { toast('영상을 받았습니다 · 코트 모서리를 찍어 주세요'); aiGetFrame(vNow() || 0); }
+  }, 1500);
+}
+async function aiGetFrame(t) {
+  if (!aiVideo || aiVideo.status !== 'ready') { toast('먼저 영상을 받으세요'); return; }
+  try {
+    const r = await fetch(`${aiBase()}/videos/${encodeURIComponent(ai.vid)}/frame?t=${Math.max(0, +t || 0).toFixed(2)}&w=1280`, { cache: 'no-store' });
+    if (!r.ok) throw new Error();
+    if (aiImgUrl) URL.revokeObjectURL(aiImgUrl);
+    aiImgUrl = URL.createObjectURL(await r.blob()); ai.frameT = +t || 0; aiSave(); renderAI();
+  } catch (e) { toast('화면을 가져오지 못했습니다'); }
+}
+function aiFrameGeom() {                     // 화면(이미지)과 둘레 여백을 영상 픽셀 좌표로
+  const v = aiVideo, box = $('aiFrameBox'), img = $('aiImg');
+  if (!v || !v.width || box.classList.contains('hide')) return null;
+  const br = box.getBoundingClientRect(), ir = img.getBoundingClientRect();
+  if (!ir.width) return null;
+  const s = v.width / ir.width;
+  return { s, ir, vb: [-(ir.left - br.left) * s, -(ir.top - br.top) * s, br.width * s, br.height * s] };
+}
+function homog(src, dst) {                   // 4점 대응으로 원근 변환 행렬 (src → dst)
+  const A = [], b = [];
+  for (let i = 0; i < 4; i++) {
+    const [x, y] = src[i], [u, v] = dst[i];
+    A.push([x, y, 1, 0, 0, 0, -u * x, -u * y]); b.push(u);
+    A.push([0, 0, 0, x, y, 1, -v * x, -v * y]); b.push(v);
+  }
+  for (let c = 0; c < 8; c++) {
+    let p = c; for (let r = c + 1; r < 8; r++) if (Math.abs(A[r][c]) > Math.abs(A[p][c])) p = r;
+    [A[c], A[p]] = [A[p], A[c]]; [b[c], b[p]] = [b[p], b[c]];
+    if (Math.abs(A[c][c]) < 1e-12) return null;
+    for (let r = 0; r < 8; r++) if (r !== c) { const f = A[r][c] / A[c][c]; for (let k = c; k < 8; k++) A[r][k] -= f * A[c][k]; b[r] -= f * b[c]; }
+  }
+  const h = b.map((v, i) => v / A[i][i]);
+  return [[h[0], h[1], h[2]], [h[3], h[4], h[5]], [h[6], h[7], 1]];
+}
+const hproj = (H, x, y) => { const w = H[2][0] * x + H[2][1] * y + 1; return [(H[0][0] * x + H[0][1] * y + H[0][2]) / w, (H[1][0] * x + H[1][1] * y + H[1][2]) / w]; };
+$('aiFrameBox').addEventListener('click', e => {
+  const g = aiFrameGeom(); if (!g) return;
+  if (ai.corners.length >= 4) { toast('다시 찍으려면 「다시 찍기」를 누르세요'); return; }
+  ai.corners.push([Math.round((e.clientX - g.ir.left) * g.s), Math.round((e.clientY - g.ir.top) * g.s)]);
+  aiSave(); renderAI();
+});
+$('aiImg').addEventListener('load', () => renderAI());
+addEventListener('resize', () => { if (aiImgUrl) renderAI(); });
+async function aiRun() {
+  if (!aiVideo || aiVideo.status !== 'ready') { toast('먼저 영상을 받으세요'); return; }
+  if (ai.corners.length !== 4) { toast('코트 모서리 4개를 찍어 주세요'); return; }
+  const now = Math.max(0, Math.floor(vNow() || 0)), mins = +ai.range;
+  const body = { video: ai.vid, corners: ai.corners, court: ai.court, fps: +ai.fps, model: ai.model, tiles: !!ai.tiles,
+    start: ai.range === 'all' ? 0 : now, end: ai.range === 'all' ? null : now + mins * 60 };
+  let r; try { r = await aiApi('POST', '/jobs', body); } catch (e) { r = { ok: false, body: {} }; }
+  if (!r.ok) { toast(r.body.error || '분석을 시작하지 못했습니다'); return; }
+  aiJob = r.body; ai.job = aiJob.id; ai.done = {}; aiRes = null; aiCur = null; aiSave(); renderAI(); aiWatch();
+}
+function aiWatch() {
+  clearTimeout(aiPollT);
+  aiPollT = setTimeout(async () => {
+    if (!ai.job) return;
+    let r; try { r = await aiApi('GET', '/jobs/' + ai.job); } catch (e) { r = null; }
+    if (r && r.status === 404) { ai.job = null; aiJob = null; aiSave(); renderAI(); return; }
+    if (r && r.ok) {
+      const j = r.body;
+      if (j.status === 'done' && j.result) { aiRes = j.result; delete j.result; aiJob = j; aiCandKey = ''; renderAI(); render(); toast('AI 분석이 끝났습니다 · 후보를 검토하세요'); return; }
+      aiJob = j; renderAI();
+      if (j.status === 'error' || j.status === 'cancelled') return;
+    }
+    aiWatch();
+  }, aiJob ? 1500 : 200);
+}
+async function aiCancel() { if (!ai.job) return; try { await aiApi('POST', `/jobs/${ai.job}/cancel`, {}); } catch (e) {} toast('분석을 멈추는 중입니다'); }
+function aiStopSpan() { if (aiSpan) { clearInterval(aiSpan.timer); aiSpan = null; } }
+function aiPlay(a, b) {                     // 후보 장면만 보여 주고 멈춤
+  if (!ytOk()) return;
+  stopClips(); aiStopSpan();
+  const sp = aiSpan = { end: b, at: Date.now(), timer: 0 };
+  sp.timer = setInterval(() => {
+    if (aiSpan !== sp || Date.now() - sp.at < 700) return;
+    const n = vNow(); if (n != null && n >= sp.end) { try { yt.pauseVideo(); } catch (e) {} aiStopSpan(); }
+  }, 200);
+  seek(a, true);
+}
+function aiApplyPositions(ev) {             // 그 순간 AI 가 본 선수 위치를 보드에 (연결된 트랙은 그 선수 자리, 나머지는 가까운 자리)
+  for (const s of [0, 1]) {
+    const pts = ev.players.filter(q => aiSideIdx(q[1]) === s).map(q => ({ tid: q[0], p: aiBoardPt(q[2], q[3]), used: false }));
+    const free = new Set([0, 1, 2, 3, 4, 5, 6, 7, 8]);
+    for (const q of pts) { const m = ai.map[q.tid]; if (m && m.s === s && free.has(m.p)) { draft.pos[s * 9 + m.p] = q.p; free.delete(m.p); q.used = true; } }
+    const pairs = [];
+    for (const q of pts) if (!q.used) for (const p of free) pairs.push([Math.hypot(q.p[0] - draft.pos[s * 9 + p][0], q.p[1] - draft.pos[s * 9 + p][1]), q, p]);
+    pairs.sort((x, y) => x[0] - y[0]);
+    for (const [, q, p] of pairs) if (!q.used && free.has(p)) { draft.pos[s * 9 + p] = q.p; q.used = true; free.delete(p); }
+  }
+}
+function aiFocus(i) {
+  if (!aiRes || i == null || i < 0 || i >= aiRes.events.length) { aiCur = null; render(); return; }
+  aiCur = i;
+  const ev = aiRes.events[i], s = aiSideIdx(ev.side), m = ai.map[ev.track];
+  Object.assign(pad, { side: s, sk: ev.sk, p: m && m.s === s ? m.p : null });
+  if (ai.autoPos && draft.edit == null) aiApplyPositions(ev);
+  msg = null; pend = null; sel = null;
+  aiPlay(ev.t - opt.pre, ev.t + Math.min(opt.post, 3));
+  render();
+}
+function aiNext() {
+  if (!aiRes) return;
+  let i = (aiCur == null ? -1 : aiCur) + 1;
+  while (i < aiRes.events.length && ai.done[i]) i++;
+  if (i >= aiRes.events.length) { aiCur = null; toast('모든 후보를 검토했습니다'); render(); return; }
+  aiFocus(i);
+}
+function aiAfter(a) {                        // 후보를 기록으로 확정 → 트랙 연결 기억 → 다음 후보
+  const ev = aiEvent(); if (!ev) return;
+  if (aiSideIdx(ev.side) === a.side) ai.map[ev.track] = { s: a.side, p: a.p };
+  ai.done[aiCur] = 1; aiSave(); aiNext();
+}
+function renderAI() {
+  if (document.activeElement !== $('aiUrl')) $('aiUrl').value = ai.url;
+  $('aiState').innerHTML = aiInfo ? `<span class="sdot on"></span>연결됨 · ${esc(aiInfo.gpu || 'CPU')}${aiInfo.busy ? ' · 분석 중' : ''}` : '<span class="sdot"></span>연결 안 됨';
+  $('aiSteps').classList.toggle('hide', !aiInfo);
+  // 1. 영상
+  const v = aiVideo, dl = v && v.status === 'downloading';
+  $('aiVid').textContent = !v ? (M.video ? '아직 받지 않음' : '먼저 위에서 유튜브 영상을 불러오세요')
+    : v.status === 'ready' ? `준비됨 · ${v.width}×${v.height} · ${v.fps}fps · ${fmtT(v.duration)}`
+    : dl ? `받는 중 ${Math.round((v.progress || 0) * 100)}%` : `실패: ${v.error || ''}`;
+  $('aiVidBarBox').classList.toggle('hide', !dl);
+  $('aiVidBar').style.width = Math.round((v && v.progress || 0) * 100) + '%';
+  // 2. 모서리
+  const ready = v && v.status === 'ready';
+  $('aiFrameBox').classList.toggle('hide', !aiImgUrl || !ready);
+  if (aiImgUrl && $('aiImg').src !== aiImgUrl) $('aiImg').src = aiImgUrl;
+  $('aiCornerState').textContent = ai.corners.length === 4 ? '✓ 모서리 4개' : `${ai.corners.length}/4`;
+  const g = ready && aiImgUrl ? aiFrameGeom() : null;
+  if (g) {
+    const P = $('aiPoly'), C = ai.corners, lab = ['①', '②', '③', '④'], r = v.width / 160;
+    P.setAttribute('viewBox', g.vb.join(' '));
+    let extra = '';
+    if (C.length === 4) {                    // 찍은 모서리로 계산한 네트·구역선: 실제 네트와 겹치면 제대로 찍은 것
+      const [W, L] = ai.court === '6' ? [9, 18] : [10.5, 21];
+      const H = homog([[0, 0], [W, 0], [W, L], [0, L]], C);
+      if (H) {
+        const seg = (x1, y1, x2, y2, col, sw, dash) => { const a = hproj(H, x1, y1), b = hproj(H, x2, y2); return `<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="${col}" stroke-width="${sw}" ${dash ? `stroke-dasharray="${dash}"` : ''}/>`; };
+        for (const k of [1, 2]) { extra += seg(W * k / 3, 0, W * k / 3, L, 'rgba(255,255,255,.45)', r / 4, `${r} ${r}`); extra += seg(0, L / 2 * k / 3, W, L / 2 * k / 3, 'rgba(255,255,255,.35)', r / 4, `${r} ${r}`); extra += seg(0, L / 2 + L / 2 * k / 3, W, L / 2 + L / 2 * k / 3, 'rgba(255,255,255,.35)', r / 4, `${r} ${r}`); }
+        extra += seg(0, L / 2, W, L / 2, '#ff6b6b', r / 1.6, '');
+        const m = hproj(H, W / 2, L / 2);
+        extra += `<text x="${m[0]}" y="${m[1] - r}" font-size="${r * 3}" fill="#ff6b6b" font-weight="900" text-anchor="middle">네트</text>`;
+      }
+    }
+    P.innerHTML = `<rect x="0" y="0" width="${v.width}" height="${v.height}" fill="none" stroke="rgba(255,255,255,.4)" stroke-width="${r / 4}"/>` + extra +
+      (C.length > 1 ? `<polyline points="${(C.length === 4 ? [...C, C[0]] : C).map(p => p.join(',')).join(' ')}" fill="${C.length === 4 ? 'rgba(255,176,32,.12)' : 'none'}" stroke="#ffb020" stroke-width="${r / 2}"/>` : '') +
+      C.map((p, i) => `<circle cx="${p[0]}" cy="${p[1]}" r="${r}" fill="#ffb020"/><text x="${p[0] + r * 1.4}" y="${p[1] - r * 1.2}" font-size="${r * 3.4}" fill="#ffb020" font-weight="900">${lab[i]}</text>`).join('');
+  }
+  // 3. 분석
+  for (const [id, k] of [['aiNear', 'near'], ['aiCourt', 'court'], ['aiFps', 'fps'], ['aiModel', 'model'], ['aiRange', 'range']]) if (document.activeElement !== $(id)) $(id).value = String(ai[k]);
+  $('aiTiles').checked = !!ai.tiles; $('aiAutoPos').checked = !!ai.autoPos;
+  const j = aiJob, running = j && (j.status === 'running' || j.status === 'queued');
+  $('aiRun').disabled = !ready || ai.corners.length !== 4 || running;
+  $('aiCancel').classList.toggle('hide', !running);
+  $('aiBarBox').classList.toggle('hide', !running);
+  $('aiBar').style.width = Math.round((j && j.progress || 0) * 100) + '%';
+  $('aiJob').textContent = !j ? '' : running ? `${j.message || ''} ${Math.round((j.progress || 0) * 100)}%` + (j.eta != null && j.done ? ` · 남은 시간 약 ${fmtT(j.eta)}` : '')
+    : j.status === 'done' ? `✓ ${j.message || '완료'}` : j.status === 'error' ? `실패: ${j.message || ''}` : '취소됨';
+  // 4. 결과
+  $('aiResult').classList.toggle('hide', !aiRes);
+  const ev = aiEvent();
+  $('aiBanner').classList.toggle('hide', !ev);
+  if (ev) $('aiBannerText').textContent = `🤖 후보 ${aiCur + 1}/${aiRes.events.length} · ${fmtT(ev.t)} · ${tName(aiSideIdx(ev.side))} 쪽 ${SKN[ev.sk]} 추정 (트랙 T${ev.track}, 확신 ${Math.round(ev.conf * 100)}%) — 번호·평가를 고르세요`;
+  if (!aiRes) return;
+  const by = {}; for (const e of aiRes.events) by[e.sk] = (by[e.sk] || 0) + 1;
+  const nd = Object.keys(ai.done).length;
+  $('aiSum').textContent = `· 후보 ${aiRes.events.length}개 (${Object.keys(SKN).filter(k => by[k]).map(k => SKN[k] + ' ' + by[k]).join(' · ')}) · 검토 ${nd}개`;
+  $('aiReview').textContent = aiCur != null ? '⏭ 다음 후보' : nd ? '▶ 이어서 검토' : '▶ 후보 검토 시작';
+  const key = [aiRes.events.length, aiCur, nd, ai.near, Object.keys(ai.map).length, M.home.name, M.away.name].join('|');
+  if (key === aiCandKey) return;
+  aiCandKey = key;
+  $('aiCands').innerHTML = aiRes.events.map((e, i) => {
+    const s = aiSideIdx(e.side), m = ai.map[e.track], who = m && m.s === s ? ' → ' + esc(pLabel(s, m.p)) : '';
+    return `<button data-i="${i}" class="${i === aiCur ? 'on' : ai.done[i] === 1 ? 'done' : ai.done[i] === 2 ? 'skip' : ''}">${i + 1}. ${fmtT(e.t)} · <span class="${s ? 'dotA' : 'dotH'}"></span>${esc(tName(s))} ${SKN[e.sk]} · T${e.track}${who}${ai.done[i] === 1 ? ' ✓' : ''}</button>`;
+  }).join('');
+  const cur = $('aiCands').querySelector('.on'); if (cur) cur.scrollIntoView({ block: 'nearest' });
+  const tracks = Object.entries(aiRes.tracks || {}).filter(([, t]) => t.touches > 0).sort((a, b) => b[1].touches - a[1].touches).slice(0, 40);
+  const opts = s0 => ['<option value="">— 연결 안 함</option>', ...[0, 1].flatMap(s => Array.from({ length: 9 }, (_, p) => `<option value="${s}:${p}">${esc(tName(s))} ${esc(pLabel(s, p))}</option>`))].join('');
+  $('aiMap').innerHTML = tracks.map(([tid, t]) => `<label>T${tid} · ${esc(tName(aiSideIdx(t.side)))} 쪽 · 터치 ${t.touches}<select data-tid="${tid}">${opts()}</select></label>`).join('') || '<span class="muted">터치가 있는 트랙이 없습니다</span>';
+  for (const sel of $('aiMap').querySelectorAll('select')) { const m = ai.map[sel.dataset.tid]; sel.value = m ? `${m.s}:${m.p}` : ''; }
+}
+$('aiBox').addEventListener('toggle', () => { ai.open = $('aiBox').open; aiSave(); if (ai.open && !aiInfo) aiPing(true); });
+$('aiPing').onclick = () => aiPing(false);
+$('aiUrl').addEventListener('change', () => aiPing(false));
+$('aiFetch').onclick = aiFetch;
+$('aiFrame').onclick = () => aiGetFrame(vNow() || ai.frameT || 0);
+$('aiClear').onclick = () => { ai.corners = []; aiSave(); renderAI(); };
+$('aiRun').onclick = aiRun;
+$('aiCancel').onclick = aiCancel;
+for (const [id, k] of [['aiNear', 'near'], ['aiCourt', 'court'], ['aiFps', 'fps'], ['aiModel', 'model'], ['aiRange', 'range']]) $(id).onchange = () => { ai[k] = $(id).value; aiSave(); aiCandKey = ''; render(); };
+$('aiTiles').onchange = () => { ai.tiles = $('aiTiles').checked; aiSave(); };
+$('aiAutoPos').onchange = () => { ai.autoPos = $('aiAutoPos').checked; aiSave(); };
+$('aiReview').onclick = () => aiCur != null ? (ai.done[aiCur] = ai.done[aiCur] || 2, aiSave(), aiNext()) : aiNext();
+$('aiExcel').onclick = () => { if (ai.job) window.open(`${aiBase()}/jobs/${ai.job}/excel`, '_blank'); };
+$('aiCands').addEventListener('click', e => { const b = e.target.closest('button[data-i]'); if (b) aiFocus(+b.dataset.i); });
+$('aiMap').addEventListener('change', e => {
+  const s = e.target.closest('select[data-tid]'); if (!s) return;
+  if (s.value) { const [a, b] = s.value.split(':').map(Number); ai.map[s.dataset.tid] = { s: a, p: b }; } else delete ai.map[s.dataset.tid];
+  aiSave(); aiCandKey = ''; renderAI();
+});
+$('aiSkip').onclick = () => { if (aiCur == null) return; ai.done[aiCur] = 2; aiSave(); aiNext(); };
+$('aiStop').onclick = () => { aiCur = null; aiStopSpan(); render(); };
+if (ai.open) { $('aiBox').open = true; aiPing(true); }
+
+window.vbAnalysis = { parseToken, toLatin, buildCsv, get M() { return M; }, ai, get aiRes() { return aiRes; } };   // 점검용
 renderRoster(); render();
 $('vUrl').value = M.video || '';
 if (M.video) loadVideo(M.video, true);

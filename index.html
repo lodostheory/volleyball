@@ -773,7 +773,7 @@ function setTab(tab) {
     if (!frames[tab]) {
       const view = $('view-' + tab), f = document.createElement('iframe');
       f.title = view.getAttribute('aria-label');
-      f.allow = 'fullscreen; autoplay; encrypted-media; picture-in-picture';
+      f.allow = 'fullscreen; autoplay; encrypted-media; picture-in-picture; local-network-access; local-network; loopback-network';   // 분석 탭이 이 PC 의 AI 서버(127.0.0.1)에 붙을 수 있게
       f.setAttribute('allowfullscreen', '');
       if (tab === 'game') f.addEventListener('load', focusGame);
       f.src = view.dataset.src;
