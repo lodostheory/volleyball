@@ -1,7 +1,7 @@
 {
   "name": "VOLLYBALL MANIA",
   "short_name": "VB MANIA",
-  "description": "9인제 배구 수비 포메이션 시뮬레이터",
+  "description": "배구 경기 영상 분석 · 배구 게임",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

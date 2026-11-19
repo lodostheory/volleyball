@@ -1,5 +1,5 @@
 // 오프라인(체육관 등 통신이 약한 곳)에서도 열리도록 캐시. 온라인이면 최신본으로 갱신.
-const CACHE = 'vbm-v3';
+const CACHE = 'vbm-v4';
 const FILES = ['./', 'index.html', 'game.html', 'analysis.html', 'manifest.json', 'icon.svg', 'icon-180.png', 'icon-192.png', 'icon-512.png'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));
