@@ -303,6 +303,7 @@ details.aibox>summary small{font-weight:600;color:var(--muted);font-size:12px}
       <div class="pmain">
     <div class="vid" style="margin-top:0"><div id="yt"></div><div class="empty" id="vEmpty">위 「📹 경기 영상」에 유튜브 주소를 넣고 불러오면 여기서 재생됩니다.<br>영상을 보면서 아래 「동작 기록」에 코드나 패드로 기록하세요</div></div>
     <div class="opts">
+      <span class="hide" id="vRange" style="color:var(--accent)"></span>
       <span>입력 시각 보정 <select id="oLead"><option value="0">0초</option><option value="1">−1초</option><option value="2">−2초</option><option value="3">−3초</option><option value="5">−5초</option></select></span>
       <span>클립 앞 <select id="oPre"><option>1</option><option>2</option><option>3</option><option>5</option><option>8</option></select>초</span>
       <span>뒤 <select id="oPost"><option>2</option><option>3</option><option>5</option><option>8</option><option>12</option></select>초</span>
@@ -852,9 +853,9 @@ function ytId(u) {
 const ytStart = u => { const m = String(u).match(/[?&#](?:t|start)=(\d+)/); return m ? +m[1] : 0; };
 function makePlayer(id, start) {
   yt = new YT.Player('yt', { videoId: id, playerVars: { playsinline: 1, rel: 0, start, disablekb: 1 }, events: {
-    onReady: () => { try { yt.setPlaybackRate(+opt.rate); } catch (e) {} },
+    onReady: () => { try { yt.setPlaybackRate(+opt.rate); } catch (e) {} vRangeLabel(); const r = playRange(); if (r && (vNow() || 0) < r.lo) seek(r.lo, false); },
     // 영상을 눌러 재생·정지하면 입력창으로 포커스를 돌려 계속 코드를 칠 수 있게 (마우스 환경)
-    onStateChange: e => { if (FINE && (e.data === 1 || e.data === 2) && sheet.classList.contains('hide')) { const a = document.activeElement; if (!a || a.tagName === 'IFRAME' || a === document.body) codeIn.focus({ preventScroll: true }); } },
+    onStateChange: e => { if (e.data === 1 || e.data === 5) vRangeLabel(); if (FINE && (e.data === 1 || e.data === 2) && sheet.classList.contains('hide')) { const a = document.activeElement; if (!a || a.tagName === 'IFRAME' || a === document.body) codeIn.focus({ preventScroll: true }); } },
   } });
 }
 function loadVideo(u, quiet) {
@@ -871,9 +872,32 @@ function loadVideo(u, quiet) {
 window.onYouTubeIframeAPIReady = () => { if (ytWant) { const [id, st] = ytWant; ytWant = null; makePlayer(id, st); } };
 const vNow = () => { try { return yt && yt.getCurrentTime ? yt.getCurrentTime() : null; } catch (e) { return null; } };
 const ytOk = () => !!(yt && yt.seekTo);
-function seek(t, play) { try { if (ytOk() && t != null) { yt.seekTo(Math.max(0, t), true); if (play) yt.playVideo(); else yt.pauseVideo(); } } catch (e) {} }
+/* 받은 영상을 잘라 냈으면 재생도 남긴 부분 안에서만 (유튜브 영상 자체는 자를 수 없어 시작으로 보내고 끝에서 멈춤) */
+function playRange() {
+  const r = ai.range, id = ytId(M.video);
+  if (!r || !id || r.vid !== id) return null;
+  let dur = 0; try { dur = ytOk() && yt.getDuration ? yt.getDuration() : 0; } catch (e) {}
+  const lo = r.lo > 0.5 ? r.lo : 0, hi = dur && r.hi < dur - 1.5 ? r.hi : Infinity;
+  return lo > 0 || hi < Infinity ? { lo, hi } : null;
+}
+function vRangeLabel() {
+  const pr = playRange(); $('vRange').classList.toggle('hide', !pr);
+  if (pr) $('vRange').textContent = `✂ 잘라 낸 부분만 재생 ${fmtT(pr.lo)} ~ ${pr.hi < Infinity ? fmtT(pr.hi) : '끝'}`;
+}
+const inRange = t => { const r = playRange(); return r && t != null ? Math.min(Math.max(t, r.lo), r.hi) : t; };
+setInterval(() => {
+  const r = playRange(); if (!r) return;
+  let st; try { st = yt.getPlayerState(); } catch (e) { return; }
+  if (st !== 1 && st !== 2 && st !== 3) return;          // 재생 · 멈춤 · 버퍼링 중일 때만
+  const t = vNow(); if (t == null) return;
+  try {
+    if (t < r.lo - 0.3) yt.seekTo(r.lo, true);
+    else if (t > r.hi + 0.25) { yt.pauseVideo(); yt.seekTo(r.hi, true); }
+  } catch (e) {}
+}, 250);
+function seek(t, play) { t = inRange(t); try { if (ytOk() && t != null) { yt.seekTo(Math.max(0, t), true); if (play) yt.playVideo(); else yt.pauseVideo(); } } catch (e) {} }
 function togglePlay() { try { if (!ytOk()) return; if (yt.getPlayerState() === 1) yt.pauseVideo(); else yt.playVideo(); } catch (e) {} }
-function nudge(d) { const n = vNow(); if (n != null) try { yt.seekTo(Math.max(0, n + d), true); } catch (e) {} }
+function nudge(d) { const n = vNow(); if (n != null) try { yt.seekTo(Math.max(0, inRange(n + d)), true); } catch (e) {} }
 function toggleSlow() { slow = !slow; try { yt.setPlaybackRate(slow ? .5 : +opt.rate); } catch (e) {} toast(slow ? '느리게 (0.5배)' : `보통 속도 (${opt.rate}배)`); }
 $('bLoad').onclick = () => {
   const u = $('vUrl').value.trim();
@@ -1355,6 +1379,7 @@ function aiTrimBounds() {                    // 잘라 낸 뒤 남은 부분(유
 function aiSpanToTrim() {                     // 분석 구간을 잘라 낸 부분으로
   const b = aiTrimBounds(); if (!b) return;
   [ai.start, ai.end] = b; ai.autoSpan = b; aiSave(); renderAI();
+  const r = playRange(); if (r) seek(r.lo, false);         // 재생 화면도 남긴 부분 시작으로
 }
 async function aiRefetch() {
   if (!confirm('잘라 낸 영상을 지우고 원본을 처음부터 다시 받을까요?')) return;
@@ -1510,6 +1535,11 @@ function renderAI() {
     : dl ? `받는 중 ${Math.round((v.progress || 0) * 100)}%` : `실패: ${v.error || ''}`;
   $('aiVidBarBox').classList.toggle('hide', !dl);
   $('aiTrimBox').classList.toggle('hide', !(v && v.status === 'ready' && !v.local));
+  if (v && v.status === 'ready' && !v.local && v.id === ai.vid && v.duration) {   // 받은 영상의 남은 부분을 기억 (서버가 꺼져 있어도 재생 제한 유지)
+    const lo = +(v.offset || 0).toFixed(2), hi = +(lo + v.duration).toFixed(2), old = ai.range;
+    if (!old || old.vid !== v.id || old.lo !== lo || old.hi !== hi) { ai.range = { vid: v.id, lo, hi }; aiSave(); }
+  }
+  vRangeLabel();
   $('aiRefetch').classList.toggle('hide', !cut);
   for (const [id, k] of [['aiTrimS', 'trimS'], ['aiTrimE', 'trimE']]) if (document.activeElement !== $(id)) $(id).value = ai[k] || '';
   $('aiTrimInfo').textContent = v && v.status === 'ready' ? aiTrimText() : '';
