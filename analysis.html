@@ -82,7 +82,8 @@ input:focus,select:focus{outline:none;border-color:var(--accent)}
 .k{min-width:44px;height:44px;border-radius:10px;background:var(--panel2);border:1.5px solid var(--line);font-weight:900;padding:2px 8px;line-height:1.05;font-size:15px}
 .k small{display:block;font-size:10px;font-weight:700;color:var(--muted);max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .k.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)} .k.on small{color:var(--accent-ink)}
-.k.ev{min-width:54px;font-size:19px}
+.k.ev{min-width:54px;font-size:19px;height:auto;min-height:44px;padding:4px 6px}
+.k.ev small{max-width:84px;white-space:normal;overflow:visible;text-overflow:clip;line-height:1.15;word-break:keep-all}   /* 평가 설명을 줄바꿈해서 다 보이게 */
 .k.ev.g{border-color:#3ddc9799} .k.ev.r{border-color:#ff5a4e99}
 .acts{display:flex;flex-direction:column;gap:5px;margin:10px 0 6px}
 .act{display:flex;align-items:center;gap:4px;flex-wrap:wrap;background:var(--panel2);border-radius:10px;padding:5px 8px}
@@ -237,7 +238,7 @@ details.aibox>summary small{font-weight:600;color:var(--muted);font-size:12px}
         </div>
         <div class="aistep" id="aiStep2">
           <h4>2. 코트 모서리 찍기</h4>
-          <div class="row"><button class="btn sm" id="aiFrame">지금 영상 시각의 화면 가져오기</button><button class="btn sm" id="aiClear">다시 찍기</button><span class="muted" id="aiCornerState"></span></div>
+          <div class="row"><button class="btn sm" id="aiFrame">지금 영상 시각의 화면 가져오기</button><button class="btn sm" id="aiClear">다시 찍기</button><button class="btn sm hide" id="aiShowFrame">🖼 화면 보기</button><span class="muted" id="aiCornerState"></span></div>
           <div class="muted" style="margin-top:4px;line-height:1.55">코트 <b>바닥 선의 네 모서리</b>를 ① 먼 쪽 왼쪽 → ② 먼 쪽 오른쪽 → ③ 가까운 쪽 오른쪽 → ④ 가까운 쪽 왼쪽 순서로 누르세요. 모서리가 화면 밖이면 둘레의 빗금 여백에 짐작해서 찍으면 됩니다. 4개를 찍으면 계산된 <b style="color:#ff6b6b">네트 위치(빨간 선)</b>가 그려지니, 실제 네트 바로 아래 바닥과 겹치는지 확인하세요. 카메라는 엔드라인 뒤 높은 곳에 고정된 영상이 가장 정확합니다.</div>
           <div class="aiframe hide" id="aiFrameBox"><img id="aiImg" alt="코트 화면"><svg id="aiPoly" preserveAspectRatio="none"></svg></div>
         </div>
@@ -1212,6 +1213,7 @@ const AI_SELF = location.protocol === 'http:' && /^(127\.0\.0\.1|localhost)$/.te
 const AI_DEFAULT = AI_SELF ? location.origin : 'http://127.0.0.1:8765';
 const ai = Object.assign({ url: AI_DEFAULT, open: AI_SELF, vid: null, corners: [], frameT: 0, near: 'home', court: '9', fps: 10, model: 's',
   start: '', end: '', tiles: false, autoPos: true, job: null, done: {}, map: {} }, lsGet(AI_KEY, {}));
+let aiShowFrame = false;                 // 모서리를 다 찍은 뒤에도 화면을 펼쳐 둘지
 let aiInfo = null, aiVideo = null, aiJob = null, aiRes = null, aiCur = null, aiImgUrl = null, aiSpan = null, aiPollT = 0, aiVidT = 0, aiCandKey = '';
 const aiSave = () => lsSet(AI_KEY, ai);
 const aiBase = () => (ai.url || AI_DEFAULT).trim().replace(/\/+$/, '');
@@ -1304,6 +1306,7 @@ $('aiFrameBox').addEventListener('click', e => {
   const g = aiFrameGeom(); if (!g) return;
   if (ai.corners.length >= 4) { toast('다시 찍으려면 「다시 찍기」를 누르세요'); return; }
   ai.corners.push([Math.round((e.clientX - g.ir.left) * g.s), Math.round((e.clientY - g.ir.top) * g.s)]);
+  if (ai.corners.length === 4) { aiShowFrame = false; toast('모서리 4개를 찍었습니다 · 화면을 접었습니다 (🖼 화면 보기로 다시 확인)'); }
   aiSave(); renderAI();
 });
 $('aiImg').addEventListener('load', () => renderAI());
@@ -1410,7 +1413,10 @@ function renderAI() {
   $('aiVidBar').style.width = Math.round((v && v.progress || 0) * 100) + '%';
   // 2. 모서리
   const ready = v && v.status === 'ready';
-  $('aiFrameBox').classList.toggle('hide', !aiImgUrl || !ready);
+  const cornersDone = ai.corners.length === 4;            // 4개를 다 찍으면 화면을 접는다 (「화면 보기」로 다시 펼침)
+  $('aiFrameBox').classList.toggle('hide', !aiImgUrl || !ready || (cornersDone && !aiShowFrame));
+  $('aiShowFrame').classList.toggle('hide', !cornersDone || !aiImgUrl);
+  $('aiShowFrame').textContent = aiShowFrame ? '화면 접기' : '🖼 화면 보기';
   if (aiImgUrl && $('aiImg').src !== aiImgUrl) $('aiImg').src = aiImgUrl;
   $('aiCornerState').textContent = ai.corners.length === 4 ? '✓ 모서리 4개' : `${ai.corners.length}/4`;
   const g = ready && aiImgUrl ? aiFrameGeom() : null;
@@ -1471,8 +1477,9 @@ $('aiBox').addEventListener('toggle', () => { ai.open = $('aiBox').open; aiSave(
 $('aiPing').onclick = () => aiPing(false);
 $('aiUrl').addEventListener('change', () => aiPing(false));
 $('aiFetch').onclick = aiFetch;
-$('aiFrame').onclick = () => aiGetFrame(vNow() || ai.frameT || 0);
-$('aiClear').onclick = () => { ai.corners = []; aiSave(); renderAI(); };
+$('aiFrame').onclick = () => { aiShowFrame = true; aiGetFrame(vNow() || ai.frameT || 0); };
+$('aiClear').onclick = () => { ai.corners = []; aiShowFrame = false; aiSave(); renderAI(); };
+$('aiShowFrame').onclick = () => { aiShowFrame = !aiShowFrame; renderAI(); };
 $('aiRun').onclick = aiRun;
 $('aiCancel').onclick = aiCancel;
 for (const [id, k] of [['aiNear', 'near'], ['aiCourt', 'court'], ['aiFps', 'fps'], ['aiModel', 'model'], ['aiStart', 'start'], ['aiEnd', 'end']]) $(id).onchange = () => { ai[k] = $(id).value.trim(); aiSave(); aiCandKey = ''; render(); };
