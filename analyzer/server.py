@@ -9,6 +9,7 @@ API
   GET  /videos                     받은 영상 목록 (+ videos 폴더에 넣은 영상)
   GET  /videos/<id>                받기 진행·영상 정보
   GET  /videos/<id>/frame?t=초&w=폭  그 시각 화면(JPEG) — 코트 모서리 찍기용
+  POST /videos/<id>/trim {start, end}  받은 영상의 앞뒤 잘라 내기 (유튜브 시각)
   POST /jobs {video, corners, court, fps, start, end, model, tiles}  분석 시작 → {id}
   GET  /jobs/<id>                  진행률 · 결과(이벤트)
   POST /jobs/<id>/cancel           분석 취소
@@ -33,6 +34,7 @@ import cv2
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import volleyball_analyzer as va  # noqa: E402
+from trim import trim_in_place  # noqa: E402
 from youtube import download, youtube_id  # noqa: E402
 
 VERSION = '1.0'
@@ -86,18 +88,23 @@ def scan_videos():
             meta_f = f.with_suffix('.json')
             meta = json.loads(meta_f.read_text(encoding='utf-8')) if meta_f.exists() else {}
             videos[vid] = {'id': vid, 'status': 'ready', 'progress': 1.0, 'path': str(f), 'title': meta.get('title') or f.name,
-                           'local': bool(prefix), **probe(f)}
+                           'local': bool(prefix), 'offset': float(meta.get('offset') or 0), **probe(f)}
 
 
-def start_download(url: str) -> dict:
+def start_download(url: str, force: bool = False) -> dict:
     vid = youtube_id(url)
     if not vid:
         raise ValueError('유튜브 주소가 아닙니다')
     with state_lock:
         v = videos.get(vid)
-        if v and v['status'] in ('ready', 'downloading'):
+        if v and v['status'] in ('downloading', 'trimming'):
             return v
-        v = videos[vid] = {'id': vid, 'status': 'downloading', 'progress': 0.0, 'title': '', 'url': url}
+        if v and v['status'] == 'ready':
+            if not force:
+                return v
+            for f in VID_DIR.glob(vid + '.*'):          # 원본 다시 받기: 잘라 낸 파일을 지우고 처음부터
+                f.unlink(missing_ok=True)
+        v = videos[vid] = {'id': vid, 'status': 'downloading', 'progress': 0.0, 'title': '', 'url': url, 'offset': 0.0}
 
     def run():
         try:
@@ -117,10 +124,46 @@ def start_download(url: str) -> dict:
     return v
 
 
+def start_trim(v: dict, start: float, end: float | None) -> dict:
+    """받은 영상의 앞뒤를 잘라 낸다. start·end 는 유튜브(원본) 시각, 파일 안 시각은 offset 만큼 앞당겨 계산"""
+    if v['status'] != 'ready':
+        raise ValueError('준비된 영상이 아닙니다')
+    if any(j['video'] == v['id'] and j['status'] in ('queued', 'running') for j in jobs.values()):
+        raise ValueError('이 영상을 분석하는 중에는 자를 수 없습니다')
+    off, dur = float(v.get('offset') or 0), float(v.get('duration') or 0)
+    fs = max(0.0, start - off)
+    fe = None if end is None else end - off
+    if fe is not None and fe <= fs + 1:
+        raise ValueError('끝 시각은 시작보다 1초 이상 뒤여야 합니다')
+    if dur and fs >= dur - 1:
+        raise ValueError('시작 시각이 영상 끝을 넘습니다')
+    if fe is not None and dur and fe >= dur:
+        fe = None
+    v.update(status='trimming', progress=0.0)
+
+    def run():
+        try:
+            path = Path(v['path'])
+            log('영상 자르기', path.name, f'{start:.1f}초 ~ {end if end is not None else "끝"}')
+            new_off, new_dur = trim_in_place(path, fs, fe, progress=lambda f: v.update(progress=round(f, 3)))
+            meta_f = path.with_suffix('.json')
+            meta = json.loads(meta_f.read_text(encoding='utf-8')) if meta_f.exists() else {}
+            meta['offset'] = round(off + new_off, 3)
+            meta_f.write_text(json.dumps(meta, ensure_ascii=False), encoding='utf-8')
+            v.update(status='ready', progress=1.0, offset=meta['offset'], **probe(path))
+            log('영상 자르기 완료', f"원본 {meta['offset']:.1f}초부터 {v['duration']}초 남김")
+        except Exception as e:  # noqa: BLE001
+            v.update(status='ready', progress=1.0, error=f'자르기 실패: {e}'[:300])
+            log('영상 자르기 실패', e)
+
+    threading.Thread(target=run, daemon=True).start()
+    return v
+
+
 def frame_jpeg(v: dict, t: float, width: int) -> bytes:
     cap = cv2.VideoCapture(v['path'])
     try:
-        cap.set(cv2.CAP_PROP_POS_MSEC, max(0.0, t) * 1000)
+        cap.set(cv2.CAP_PROP_POS_MSEC, max(0.0, t - float(v.get('offset') or 0)) * 1000)   # 유튜브 시각 → 파일 시각
         ok, fr = cap.read()
         if not ok:
             cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
@@ -183,8 +226,16 @@ def run_job(job: dict):
                 job.update(done=done, total=total, progress=round(done / max(1, total), 4), eta=round(rate * (total - done)),
                            elapsed=round(elapsed))
 
-            res = an.analyze(v['path'], court, fps=p['fps'], start=p['start'], end=p['end'], progress=prog, cancel=lambda: job['cancel'])
-            res['video'].update(id=v['id'], title=v.get('title', ''))
+            off = float(v.get('offset') or 0)               # 앞을 잘라 낸 영상이면 파일 0초 = 원본 off 초
+            fs = max(0.0, p['start'] - off)
+            fe = None if p['end'] is None else max(fs + 0.5, p['end'] - off)
+            res = an.analyze(v['path'], court, fps=p['fps'], start=fs, end=fe, progress=prog, cancel=lambda: job['cancel'])
+            if off:
+                for e in res['events']:
+                    e['t'] = round(e['t'] + off, 2)
+                res['params']['start'] = round(res['params']['start'] + off, 2)
+                res['params']['end'] = round(res['params']['end'] + off, 2)
+            res['video'].update(id=v['id'], title=v.get('title', ''), offset=off)
             RES_DIR.mkdir(parents=True, exist_ok=True)
             out = RES_DIR / f"{job['id']}.json"
             out.write_text(json.dumps(res, ensure_ascii=False), encoding='utf-8')
@@ -344,7 +395,15 @@ class Handler(BaseHTTPRequestHandler):
         try:
             body = self._body()
             if parts == ['videos']:
-                v = start_download(str(body.get('url', '')))
+                v = start_download(str(body.get('url', '')), force=bool(body.get('force')))
+                return self._json({k: v[k] for k in v if k != 'path'})
+            if len(parts) == 3 and parts[0] == 'videos' and parts[2] == 'trim':
+                v = videos.get(parts[1])
+                if not v:
+                    return self._err(404, '영상이 없습니다')
+                start = float(body.get('start') or 0)
+                end = float(body['end']) if body.get('end') not in (None, '') else None
+                v = start_trim(v, max(0.0, start), end)
                 return self._json({k: v[k] for k in v if k != 'path'})
             if parts == ['jobs']:
                 return self._json(job_public(start_job(body), False))

@@ -235,6 +235,19 @@ details.aibox>summary small{font-weight:600;color:var(--muted);font-size:12px}
           <h4>1. 영상 받기</h4>
           <div class="row"><button class="btn" id="aiFetch">위에서 불러온 유튜브 영상 받기</button><span class="muted" id="aiVid"></span></div>
           <div class="prog hide" id="aiVidBarBox"><div id="aiVidBar"></div></div>
+          <div class="hide" id="aiTrimBox" style="margin-top:8px">
+            <div class="row">
+              <span class="muted">✂ 앞뒤 잘라 내기</span>
+              <input id="aiTrimS" class="mono" style="width:84px" placeholder="남길 시작" title="이 시각 앞부분을 지움 (예: 0:45). 비우면 앞은 그대로">
+              <button class="btn sm" id="aiTrimSNow" title="지금 재생 위치">⏱ 지금</button>
+              <span class="muted">~</span>
+              <input id="aiTrimE" class="mono" style="width:84px" placeholder="남길 끝" title="이 시각 뒷부분을 지움. 비우면 뒤는 그대로">
+              <button class="btn sm" id="aiTrimENow" title="지금 재생 위치">⏱ 지금</button>
+              <button class="btn sm danger" id="aiTrimGo">자르기</button>
+              <button class="btn sm hide" id="aiRefetch" title="잘라 낸 영상을 지우고 원본을 다시 받음">원본 다시 받기</button>
+            </div>
+            <div class="muted" id="aiTrimInfo" style="margin-top:4px"></div>
+          </div>
         </div>
         <div class="aistep" id="aiStep2">
           <h4>2. 코트 모서리 찍기</h4>
@@ -1245,7 +1258,7 @@ async function aiPing(quiet) {
     renderAI(); return;
   }
   if (ai.vid) { try { const r = await aiApi('GET', '/videos/' + ai.vid); aiVideo = r.ok ? r.body : null; } catch (e) { aiVideo = null; } }
-  if (aiVideo && aiVideo.status === 'downloading') aiWaitVideo();
+  if (aiVideo && (aiVideo.status === 'downloading' || aiVideo.status === 'trimming')) aiWaitVideo();
   if (aiVideo && aiVideo.status === 'ready' && !aiImgUrl) aiGetFrame(ai.frameT || 0);
   if (ai.job) aiWatch();
   renderAI();
@@ -1264,9 +1277,43 @@ function aiWaitVideo() {
   aiVidT = setTimeout(async () => {
     try { const r = await aiApi('GET', '/videos/' + ai.vid); if (r.ok) aiVideo = r.body; } catch (e) {}
     renderAI();
-    if (aiVideo && aiVideo.status === 'downloading') aiWaitVideo();
-    else if (aiVideo && aiVideo.status === 'ready') { toast('영상을 받았습니다 · 코트 모서리를 찍어 주세요'); aiGetFrame(vNow() || 0); }
+    if (aiVideo && (aiVideo.status === 'downloading' || aiVideo.status === 'trimming')) aiWaitVideo();
+    else if (aiVideo && aiVideo.status === 'ready') {
+      if (aiTrimming) { aiTrimming = false; toast(aiVideo.error ? aiVideo.error : `잘라 냈습니다 · ${fmtT(aiVideo.offset || 0)} ~ ${fmtT((aiVideo.offset || 0) + aiVideo.duration)} 남김`); }
+      else toast('영상을 받았습니다 · 코트 모서리를 찍어 주세요');
+      aiGetFrame(vNow() || aiVideo.offset || 0);
+    }
   }, 1500);
+}
+let aiTrimming = false;
+function aiTrimSpan() {                      // 남길 구간(원본 시각). 빈 칸은 지금 남아 있는 앞·끝 그대로
+  const lo = aiVideo.offset || 0, hi = lo + (aiVideo.duration || 0);
+  const s = parseT(ai.trimS), e = parseT(ai.trimE);
+  if (Number.isNaN(s) || Number.isNaN(e)) return { err: '시각을 1:30 처럼 적어 주세요' };
+  if (s == null && e == null) return { err: '남길 시작이나 끝 시각을 넣으세요' };
+  const S = s == null ? lo : s, E = e == null ? hi : e;
+  if (S < lo - 0.5 || E > hi + 0.5) return { err: `지금 남아 있는 범위(${fmtT(lo)} ~ ${fmtT(hi)}) 안에서 고르세요` };
+  if (E - S < 2) return { err: '남길 부분이 너무 짧습니다' };
+  return { start: S, end: E, lo, hi };
+}
+function aiTrimText() {
+  const t = aiTrimSpan();
+  if (t.err) return (ai.trimS || ai.trimE) ? '⚠ ' + t.err : '필요 없는 앞·뒤를 지울 수 있습니다 (남길 시작·끝 시각을 넣고 「자르기」). 화질은 그대로이고, 잘라 낸 뒤에도 영상 시각은 유튜브와 같습니다';
+  return `${fmtT(t.start)} ~ ${fmtT(t.end)} 남김 · 앞 ${fmtT(Math.max(0, t.start - t.lo))} · 뒤 ${fmtT(Math.max(0, t.hi - t.end))} 지움 (압축 구조상 시작은 1~4초 앞에서 잘릴 수 있음)`;
+}
+async function aiTrim() {
+  const t = aiTrimSpan();
+  if (t.err) { toast(t.err); return; }
+  if (!confirm(`받은 영상에서 ${fmtT(t.start)} 앞부분과 ${fmtT(t.end)} 뒷부분을 지웁니다.\n지운 부분은 「원본 다시 받기」로만 되살릴 수 있습니다. 자를까요?`)) return;
+  let r; try { r = await aiApi('POST', `/videos/${encodeURIComponent(ai.vid)}/trim`, { start: t.start, end: t.end >= t.hi - 0.5 ? null : t.end }); } catch (e) { r = { ok: false, body: {} }; }
+  if (!r.ok) { toast(r.body.error || '자르지 못했습니다'); return; }
+  aiVideo = r.body; aiTrimming = true; ai.trimS = ''; ai.trimE = ''; aiSave(); renderAI(); aiWaitVideo();
+}
+async function aiRefetch() {
+  if (!confirm('잘라 낸 영상을 지우고 원본을 처음부터 다시 받을까요?')) return;
+  let r; try { r = await aiApi('POST', '/videos', { url: M.video, force: true }); } catch (e) { r = { ok: false, body: {} }; }
+  if (!r.ok) { toast(r.body.error || '다시 받지 못했습니다'); return; }
+  aiVideo = r.body; renderAI(); aiWaitVideo();
 }
 async function aiGetFrame(t) {
   if (!aiVideo || aiVideo.status !== 'ready') { toast('먼저 영상을 받으세요'); return; }
@@ -1319,13 +1366,14 @@ function parseT(s) {
   return s.split(':').reduce((a, v) => a * 60 + +v, 0);
 }
 function aiSpanOf() {
-  const start = parseT(ai.start), end = parseT(ai.end), dur = aiVideo && aiVideo.duration || null;
+  const start = parseT(ai.start), end = parseT(ai.end);
+  const lo = aiVideo && aiVideo.offset || 0, hi = aiVideo && aiVideo.duration ? lo + aiVideo.duration : null;   // 남아 있는 범위(원본 시각)
   if (Number.isNaN(start)) return { err: '시작 시각을 1:30 처럼 적어 주세요', field: 'aiStart' };
   if (Number.isNaN(end)) return { err: '끝 시각을 1:30 처럼 적어 주세요 (비우면 끝까지)', field: 'aiEnd' };
-  const s = start || 0;
-  if (dur && s >= dur) return { err: `시작 시각이 영상 길이(${fmtT(dur)})를 넘습니다`, field: 'aiStart' };
+  const s = Math.max(start || 0, lo);
+  if (hi && s >= hi) return { err: `시작 시각이 영상 끝(${fmtT(hi)})을 넘습니다`, field: 'aiStart' };
   if (end != null && end <= s) return { err: '끝 시각은 시작보다 뒤여야 합니다', field: 'aiEnd' };
-  return { start: s, end: end != null && dur ? Math.min(end, dur) : end };
+  return { start: s, end: end != null && hi ? Math.min(end, hi) : end };
 }
 async function aiRun() {
   if (!aiVideo || aiVideo.status !== 'ready') { toast('먼저 영상을 받으세요'); return; }
@@ -1405,11 +1453,17 @@ function renderAI() {
   $('aiOpenLocal').href = aiBase() + '/app/#analysis';
   $('aiHelp').classList.toggle('hide', AI_SELF && !!aiInfo);
   // 1. 영상
-  const v = aiVideo, dl = v && v.status === 'downloading';
+  const v = aiVideo, dl = v && (v.status === 'downloading' || v.status === 'trimming');
+  const cut = v && v.offset > 0.05;
   $('aiVid').textContent = !v ? (M.video ? '아직 받지 않음' : '먼저 위에서 유튜브 영상을 불러오세요')
-    : v.status === 'ready' ? `준비됨 · ${v.width}×${v.height} · ${v.fps}fps · ${fmtT(v.duration)}`
+    : v.status === 'ready' ? `준비됨 · ${v.width}×${v.height} · ${v.fps}fps · ${fmtT(v.duration)}` + (cut ? ` (원본 ${fmtT(v.offset)} ~ ${fmtT(v.offset + v.duration)} 부분)` : '')
+    : v.status === 'trimming' ? `자르는 중 ${Math.round((v.progress || 0) * 100)}%`
     : dl ? `받는 중 ${Math.round((v.progress || 0) * 100)}%` : `실패: ${v.error || ''}`;
   $('aiVidBarBox').classList.toggle('hide', !dl);
+  $('aiTrimBox').classList.toggle('hide', !(v && v.status === 'ready' && !v.local));
+  $('aiRefetch').classList.toggle('hide', !cut);
+  for (const [id, k] of [['aiTrimS', 'trimS'], ['aiTrimE', 'trimE']]) if (document.activeElement !== $(id)) $(id).value = ai[k] || '';
+  $('aiTrimInfo').textContent = v && v.status === 'ready' ? aiTrimText() : '';
   $('aiVidBar').style.width = Math.round((v && v.progress || 0) * 100) + '%';
   // 2. 모서리
   const ready = v && v.status === 'ready';
@@ -1441,7 +1495,7 @@ function renderAI() {
   }
   // 3. 분석
   for (const [id, k] of [['aiNear', 'near'], ['aiCourt', 'court'], ['aiFps', 'fps'], ['aiModel', 'model'], ['aiStart', 'start'], ['aiEnd', 'end']]) if (document.activeElement !== $(id)) $(id).value = String(ai[k] ?? '');
-  { const sp = aiSpanOf(); $('aiSpan').textContent = sp.err ? '⚠ ' + sp.err : `${fmtT(sp.start)} ~ ${sp.end != null ? fmtT(sp.end) : (aiVideo && aiVideo.duration ? fmtT(aiVideo.duration) + '(끝)' : '끝')}` + (sp.end != null || (aiVideo && aiVideo.duration) ? ` · ${fmtT((sp.end ?? aiVideo.duration) - sp.start)} 분석` : ''); }
+  { const sp = aiSpanOf(); $('aiSpan').textContent = sp.err ? '⚠ ' + sp.err : `${fmtT(sp.start)} ~ ${sp.end != null ? fmtT(sp.end) : (aiVideo && aiVideo.duration ? fmtT((aiVideo.offset || 0) + aiVideo.duration) + '(끝)' : '끝')}` + (sp.end != null || (aiVideo && aiVideo.duration) ? ` · ${fmtT((sp.end ?? ((aiVideo.offset || 0) + aiVideo.duration)) - sp.start)} 분석` : ''); }
   $('aiTiles').checked = !!ai.tiles; $('aiAutoPos').checked = !!ai.autoPos;
   const j = aiJob, running = j && (j.status === 'running' || j.status === 'queued');
   $('aiRun').disabled = !ready || ai.corners.length !== 4 || running;
@@ -1478,6 +1532,13 @@ $('aiPing').onclick = () => aiPing(false);
 $('aiUrl').addEventListener('change', () => aiPing(false));
 $('aiFetch').onclick = aiFetch;
 $('aiFrame').onclick = () => { aiShowFrame = true; aiGetFrame(vNow() || ai.frameT || 0); };
+for (const [id, k] of [['aiTrimS', 'trimS'], ['aiTrimE', 'trimE']]) $(id).onchange = () => { ai[k] = $(id).value.trim(); aiSave(); renderAI(); };
+for (const [btn, k] of [['aiTrimSNow', 'trimS'], ['aiTrimENow', 'trimE']]) $(btn).onclick = () => {
+  const t = vNow(); if (t == null) { toast('먼저 영상을 불러오세요'); return; }
+  ai[k] = fmtT(Math.floor(t)); aiSave(); renderAI();
+};
+$('aiTrimGo').onclick = aiTrim;
+$('aiRefetch').onclick = aiRefetch;
 $('aiClear').onclick = () => { ai.corners = []; aiShowFrame = false; aiSave(); renderAI(); };
 $('aiShowFrame').onclick = () => { aiShowFrame = !aiShowFrame; renderAI(); };
 $('aiRun').onclick = aiRun;

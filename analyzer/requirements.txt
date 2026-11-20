@@ -8,3 +8,4 @@ pandas
 openpyxl
 yt-dlp[default]
 lap>=0.5.12
+av>=12
