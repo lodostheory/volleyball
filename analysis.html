@@ -22,11 +22,19 @@ button:disabled{opacity:.45;cursor:default}
 input,select{background:#0b1d2a;border:1.5px solid var(--line);border-radius:9px;height:38px;padding:0 10px;min-width:0}
 input:focus,select:focus{outline:none;border-color:var(--accent)}
 .layout{display:grid;gap:12px;grid-template-areas:"bar" "score" "video" "ai" "player" "scout" "board" "rallies" "stats" "roster"}
+.side{display:contents}
 @media (min-width:980px){
   /* 보드 열은 좁게(화면 폭의 약 27%), 선수별 기록은 왼쪽 열에서 보드 옆에 보이게 */
   .layout{grid-template-columns:minmax(0,1fr) clamp(300px,27vw,420px);
-    grid-template-areas:"bar board" "score board" "video board" "ai board" "player board" "scout board" "rallies board" "stats board" "roster roster";align-items:start}
-  .a-board{position:sticky;top:10px}
+    grid-template-areas:"bar side" "video side" "ai side" "player side" "scout side" "rallies side" "stats side" "roster roster";align-items:start}
+  /* 오른쪽: 점수판을 보드 바로 위에, 둘을 함께 화면에 고정 */
+  .side{grid-area:side;display:flex;flex-direction:column;gap:10px;position:sticky;top:10px;max-height:calc(100vh - 20px);overflow-y:auto;scrollbar-width:thin}
+  .side .card{padding:10px}
+  .side .pts{font-size:34px;min-width:42px}
+  .side .setw b{font-size:18px}
+  .side .score .team input{font-size:14px;padding:0 6px;height:34px}
+  .side .sets{margin-top:6px} .side .status{margin-top:4px;font-size:13px}
+  .side #svg{max-height:max(300px,calc(100vh - 470px))}   /* 점수판과 함께 화면 높이 안에 들어가게 */
 }
 .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px;min-width:0}
 .card h2{margin:0 0 8px;font-size:15px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
@@ -190,25 +198,6 @@ details.aibox>summary small{font-weight:600;color:var(--muted);font-size:12px}
     <div class="muted" id="saveState" style="margin-top:6px"></div>
   </section>
 
-  <section class="card" style="grid-area:score">
-    <div class="score">
-      <div class="team home"><input id="homeName" maxlength="20" placeholder="우리 팀 이름"></div>
-      <div class="nums">
-        <div class="setw">세트<b id="hSets">0</b></div>
-        <div class="pts" id="hPts">0</div><div style="font-size:28px;font-weight:900">:</div><div class="pts" id="aPts">0</div>
-        <div class="setw">세트<b id="aSets">0</b></div>
-      </div>
-      <div class="team away"><input id="awayName" maxlength="20" placeholder="상대 팀 이름"></div>
-    </div>
-    <div class="sets" id="setList"></div>
-    <div class="status" id="status"></div>
-    <div class="row" style="justify-content:center;margin-top:8px">
-      <span class="muted">세트 점수</span>
-      <select id="setPoints"><option value="15">15점</option><option value="21">21점</option><option value="25">25점</option></select>
-      <span class="muted">· 3세트 2선승 · 2점 차</span>
-    </div>
-  </section>
-
   <section class="card" style="grid-area:video">
     <h2>📹 경기 영상 <small>유튜브 주소를 넣고 불러오기</small></h2>
     <div class="row">
@@ -355,6 +344,25 @@ details.aibox>summary small{font-weight:600;color:var(--muted);font-size:12px}
     </details>
   </section>
 
+  <div class="side">    <!-- PC: 점수판 + 보드를 오른쪽에 함께 고정 / 휴대폰: 각자 원래 자리 -->
+  <section class="card" style="grid-area:score">
+    <div class="score">
+      <div class="team home"><input id="homeName" maxlength="20" placeholder="우리 팀 이름"></div>
+      <div class="nums">
+        <div class="setw">세트<b id="hSets">0</b></div>
+        <div class="pts" id="hPts">0</div><div style="font-size:28px;font-weight:900">:</div><div class="pts" id="aPts">0</div>
+        <div class="setw">세트<b id="aSets">0</b></div>
+      </div>
+      <div class="team away"><input id="awayName" maxlength="20" placeholder="상대 팀 이름"></div>
+    </div>
+    <div class="sets" id="setList"></div>
+    <div class="status" id="status"></div>
+    <div class="row" style="justify-content:center;margin-top:8px">
+      <span class="muted">세트 점수</span>
+      <select id="setPoints"><option value="15">15점</option><option value="21">21점</option><option value="25">25점</option></select>
+      <span class="muted">· 3세트 2선승 · 2점 차</span>
+    </div>
+  </section>
   <section class="card a-board" style="grid-area:board">
     <div class="capline"><div class="caption" id="caption"></div><button class="btn sm hide" id="bOvOff" style="margin-left:auto">✕ 표시 끄기</button></div>
     <div class="boardwrap">
@@ -389,6 +397,7 @@ details.aibox>summary small{font-weight:600;color:var(--muted);font-size:12px}
       <button class="btn sm" id="bClearBase" title="기본 위치를 처음 배치(3×3)로 되돌림">처음 값</button>
     </div>
   </section>
+  </div>
 
   <section class="card" style="grid-area:rallies">
     <h2>📋 랠리 기록 <small id="rCount"></small></h2>
