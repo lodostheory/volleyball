@@ -156,7 +156,21 @@ tr.zero td{color:#5f7f92}
 details.aibox>summary{cursor:pointer;font-weight:800;font-size:15px}
 details.aibox>summary small{font-weight:600;color:var(--muted);font-size:12px}
 .aistep{margin-top:10px;padding-top:10px;border-top:1px dashed var(--line)}
-.aistep h4{margin:0 0 6px;font-size:13.5px}
+.aistep h4,.review h4{margin:0 0 6px;font-size:13.5px}
+/* 영상 재생 칸: AI 결과가 있으면 왼쪽 3 결과 검토 · 오른쪽 7 영상 (휴대폰은 영상 아래에 결과) */
+.pgrid{display:flex;flex-direction:column;gap:12px}
+.pgrid .pmain{order:-1;min-width:0}
+.review{min-width:0;display:flex;flex-direction:column}
+.review .row{gap:6px}
+.review .rhelp{margin-top:6px;font-size:12px;line-height:1.55}
+.review .rhelp summary{cursor:pointer}
+@media (min-width:700px){
+  .pgrid{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,7fr);align-items:stretch}
+  .pgrid .pmain{order:0}
+  .pgrid>.review.hide+.pmain{grid-column:1/-1}
+  .review .cands{flex:1 1 0;min-height:180px;max-height:none}
+  .review .btn{padding-left:9px;padding-right:9px;font-size:12.5px}
+}
 .aiframe{position:relative;margin-top:8px;background:repeating-linear-gradient(45deg,#0b1d2a 0 10px,#10283a 10px 20px);border-radius:8px;overflow:hidden;cursor:crosshair;user-select:none;padding:7% 9%}
 .aiframe img{display:block;width:100%;height:auto;pointer-events:none}
 .aiframe svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
@@ -268,23 +282,25 @@ details.aibox>summary small{font-weight:600;color:var(--muted);font-size:12px}
           <div class="row" style="margin-top:8px"><button class="btn primary" id="aiRun">분석 시작</button><button class="btn" id="aiCancel">취소</button><span class="muted" id="aiJob"></span></div>
           <div class="prog hide" id="aiBarBox"><div id="aiBar"></div></div>
         </div>
-        <div class="aistep hide" id="aiResult">
-          <h4>4. 결과 검토 <small class="muted" id="aiSum"></small></h4>
-          <div class="row">
-            <button class="btn primary" id="aiReview">▶ 후보 검토 시작</button>
-            <button class="btn" id="aiExcel">⬇ 엑셀 리포트</button>
-            <label class="muted"><input type="checkbox" id="aiAutoPos" style="height:auto"> 후보마다 보드에 선수 위치 반영</label>
-          </div>
-          <div class="muted" style="margin-top:6px;line-height:1.55">후보를 누르면 그 장면을 영상으로 보여 주고, 패드에 AI 가 추정한 팀·동작을 미리 골라 둡니다. 선수 번호와 평가만 누르면(또는 코드 입력) 그 장면 시각으로 기록되고 다음 후보로 넘어갑니다. 한 번 고른 선수는 그 트랙에 연결되어 다음부터 자동으로 골라집니다.</div>
-          <div class="cands" id="aiCands"></div>
-          <details style="margin-top:8px"><summary class="muted" style="cursor:pointer">트랙 ↔ 선수 연결 (AI 의 트랙 번호 T 를 실제 선수에 연결)</summary><div class="aimap" id="aiMap"></div></details>
-        </div>
       </div>
     </details>
   </section>
 
   <section class="card" style="grid-area:player">
     <h2>▶ 경기 영상 재생 <small>위에서 불러온 영상이 여기서 재생됩니다 · 장면 모아 보기도 여기서</small></h2>
+    <div class="pgrid">
+      <div class="review hide" id="aiResult">
+        <h4>4. 결과 검토 <small class="muted" id="aiSum"></small></h4>
+        <div class="row">
+          <button class="btn primary" id="aiReview">▶ 후보 검토 시작</button>
+          <button class="btn" id="aiExcel">⬇ 엑셀 리포트</button>
+          <label class="muted"><input type="checkbox" id="aiAutoPos" style="height:auto"> 후보마다 보드에 선수 위치 반영</label>
+        </div>
+        <details class="rhelp"><summary class="muted">사용법</summary><div class="muted">후보를 누르면 그 장면을 영상으로 보여 주고, 패드에 AI 가 추정한 팀·동작을 미리 골라 둡니다. 선수 번호와 평가만 누르면(또는 코드 입력) 그 장면 시각으로 기록되고 다음 후보로 넘어갑니다. 한 번 고른 선수는 그 트랙에 연결되어 다음부터 자동으로 골라집니다.</div></details>
+        <div class="cands" id="aiCands"></div>
+        <details style="margin-top:8px"><summary class="muted" style="cursor:pointer">트랙 ↔ 선수 연결 (AI 의 트랙 번호 T 를 실제 선수에 연결)</summary><div class="aimap" id="aiMap"></div></details>
+      </div>
+      <div class="pmain">
     <div class="vid" style="margin-top:0"><div id="yt"></div><div class="empty" id="vEmpty">위 「📹 경기 영상」에 유튜브 주소를 넣고 불러오면 여기서 재생됩니다.<br>영상을 보면서 아래 「동작 기록」에 코드나 패드로 기록하세요</div></div>
     <div class="opts">
       <span>입력 시각 보정 <select id="oLead"><option value="0">0초</option><option value="1">−1초</option><option value="2">−2초</option><option value="3">−3초</option><option value="5">−5초</option></select></span>
@@ -301,6 +317,8 @@ details.aibox>summary small{font-weight:600;color:var(--muted);font-size:12px}
         <button class="btn sm" id="bCloseClips" style="margin-left:auto">✕ 닫기</button>
       </div>
       <div class="cliplist" id="clipList"></div>
+    </div>
+      </div>
     </div>
   </section>
 
