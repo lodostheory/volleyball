@@ -180,6 +180,7 @@ details.aibox>summary small{font-weight:600;color:var(--muted);font-size:12px}
 .sheet input{width:100%;margin-bottom:8px;height:44px}
 .item{display:block;width:100%;text-align:left;padding:10px 12px;margin-bottom:6px;border-radius:11px;background:var(--panel2);border:1.5px solid var(--line)}
 .item b{display:block;font-size:14px}
+.mrow{display:flex;gap:6px;align-items:stretch;margin-bottom:6px}.mrow .item{margin:0;flex:1;min-width:0}.mrow .del{flex:none;width:46px;padding:0}
 .toast{position:fixed;left:50%;top:14px;transform:translate(-50%,-20px);opacity:0;pointer-events:none;background:#fff;color:#0b1d2a;
   font-weight:800;font-size:13px;padding:9px 16px;border-radius:999px;transition:all .25s;z-index:9;box-shadow:0 6px 20px #0008;max-width:92vw;text-align:center}
 .toast.show{opacity:1;transform:translate(-50%,0)}
@@ -1181,25 +1182,28 @@ $('bSave').onclick = async () => {
       : r.status === 400 ? '저장할 수 없는 기록입니다' : '서버 저장 실패 · 연결을 확인하세요');
     return;
   }
-  pws[name] = pw; lsSet(PW_KEY, pws);
+  pws[name] = pw; lsSet(PW_KEY, pws); goneM.delete(name);
   serverName = name; dirty = false; render();
   toast(`「${name}」 서버에 저장했습니다`);
 };
-$('bList').onclick = async () => {
+const goneM = new Set();   // 방금 지운 경기 (서버 목록은 반영까지 최대 1분 걸려 그동안 숨김)
+async function openList() {
   openSheet(h('h2', { textContent: '서버의 경기 목록' }), h('p', { textContent: '불러오는 중…' }));
   let r; try { r = await api('GET', '/matches'); } catch (e) { r = { ok: false }; }
   if (sheet.classList.contains('hide')) return;
   const kids = [h('h2', { textContent: '서버의 경기 목록' })];
   if (!r.ok) kids.push(h('p', { textContent: '서버에 연결할 수 없어 목록을 불러오지 못했습니다.' }));
-  else if (!(r.body.matches || []).length) kids.push(h('p', { textContent: '저장된 경기가 없습니다.' }));
+  else if (r.body.matches = (r.body.matches || []).filter(m => !goneM.has(m.name)), !r.body.matches.length) kids.push(h('p', { textContent: '저장된 경기가 없습니다.' }));
   else for (const m of r.body.matches) {
     const it = h('button', { className: 'item', onclick: () => loadMatch(m.name) });
     it.append(h('b', { textContent: m.name }), h('span', { className: 'muted', textContent: `${m.home || '우리 팀'} vs ${m.away || '상대 팀'} · 세트 ${m.score || '0-0'} · ${m.updatedAt ? new Date(m.updatedAt).toLocaleString('ko-KR') : ''}` }));
-    kids.push(it);
+    const del = h('button', { className: 'btn danger del', textContent: '🗑', title: '서버에서 삭제', onclick: () => delMatch(m.name, true) });
+    kids.push(h('div', { className: 'mrow' }, it, del));
   }
   kids.push(h('button', { className: 'btn', textContent: '닫기', onclick: closeSheet }));
   openSheet(...kids);
-};
+}
+$('bList').onclick = openList;
 function resetView() { draft = newDraft(); sel = null; pend = null; undo = []; flt = null; overlay = false; stopClips(); aiCur = null; Object.assign(pad, { side: 0, p: null, sk: 'S' }); msg = null; }
 async function loadMatch(name) {
   if (dirty && M.rallies.length && !confirm('저장하지 않은 기록이 있습니다. 버리고 불러올까요?')) return;
@@ -1218,15 +1222,17 @@ $('bNew').onclick = () => {
   serverName = ''; dirty = false; $('mName').value = ''; $('vUrl').value = '';
   resetView(); render();
 };
-$('bDel').onclick = async () => {
-  const name = serverName; if (!name) return;
+$('bDel').onclick = () => { if (serverName) delMatch(serverName, false); };
+async function delMatch(name, fromList) {          // 서버의 경기 기록 삭제 (목록에서 또는 지금 경기)
   const pw = await askPw(`「${name}」 서버에서 삭제`, '서버에 저장된 이 경기 기록을 지웁니다. 되돌릴 수 없습니다. 이 기기의 화면 기록은 남습니다.');
-  if (!pw) return;
+  if (!pw) { if (fromList) openList(); return; }
   let r; try { r = await api('DELETE', '/matches/' + encodeURIComponent(name), { password: pw }); } catch (e) { r = { ok: false, status: 0 }; }
-  if (!r.ok && r.status !== 404) { toast(r.status === 401 ? '비밀번호가 맞지 않습니다' : '삭제하지 못했습니다'); return; }
-  delete pws[name]; lsSet(PW_KEY, pws); serverName = ''; dirty = true; render();
-  toast(`「${name}」 서버에서 삭제했습니다`);
-};
+  if (!r.ok && r.status !== 404) { toast(r.status === 401 ? '비밀번호가 맞지 않습니다' : '삭제하지 못했습니다'); if (fromList) openList(); return; }
+  delete pws[name]; lsSet(PW_KEY, pws); goneM.add(name);
+  if (name === serverName) { serverName = ''; dirty = true; }
+  render(); toast(`「${name}」 서버에서 삭제했습니다`);
+  if (fromList) openList();
+}
 
 /* ---------- 🤖 AI 영상 인식: PC 에서 돌아가는 분석 서버(analyzer/server.py)와 연결 ----------
    서버가 찾은 터치 후보(시각·코트 쪽·동작 추정·트랙 번호·그 순간 선수 위치)를 하나씩 영상으로 확인하며
