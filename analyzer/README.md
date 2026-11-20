@@ -81,5 +81,6 @@ GTX 16 시리즈는 FP16(반정밀도)이 결과를 망가뜨려서 항상 FP32 
 | `GET /jobs/<id>` | 진행률 · 결과(이벤트) |
 | `POST /jobs/<id>/cancel` | 취소 |
 | `GET /jobs/<id>/excel` | 엑셀 리포트 |
+| `POST /jobs/clear` | 끝난 분석 결과(JSON · 엑셀) 전체 삭제 · 진행 중인 분석은 남김 (분석 탭 「🗑 결과 전체 삭제」) |
 
 서버는 이 PC 안(127.0.0.1)에서만 열리고, VOLLEYBALL MANIA 사이트와 이 PC 주소에서 온 요청만 받습니다.

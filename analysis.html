@@ -294,6 +294,7 @@ details.aibox>summary small{font-weight:600;color:var(--muted);font-size:12px}
         <div class="row">
           <button class="btn primary" id="aiReview">▶ 후보 검토 시작</button>
           <button class="btn" id="aiExcel">⬇ 엑셀 리포트</button>
+          <button class="btn danger" id="aiClearAll" title="PC 서버에 쌓인 AI 분석 결과(후보 · 엑셀)를 모두 지웁니다. 기록한 랠리는 그대로">🗑 결과 전체 삭제</button>
           <label class="muted"><input type="checkbox" id="aiAutoPos" style="height:auto"> 후보마다 보드에 선수 위치 반영</label>
         </div>
         <details class="rhelp"><summary class="muted">사용법</summary><div class="muted">후보를 누르면 그 장면을 영상으로 보여 주고, 패드에 AI 가 추정한 팀·동작을 미리 골라 둡니다. 선수 번호와 평가만 누르면(또는 코드 입력) 그 장면 시각으로 기록되고 다음 후보로 넘어갑니다. 한 번 고른 선수는 그 트랙에 연결되어 다음부터 자동으로 골라집니다.</div></details>
@@ -1640,6 +1641,16 @@ $('aiMap').addEventListener('change', e => {
   aiSave(); aiCandKey = ''; renderAI();
 });
 $('aiSkip').onclick = () => { if (aiCur == null) return; ai.done[aiCur] = 2; aiSave(); aiNext(); };
+$('aiClearAll').onclick = async () => {
+  if (!confirm('PC 서버에 쌓인 AI 분석 결과(후보 목록 · 엑셀 리포트)를 모두 지웁니다.\n지금 보는 결과와 트랙 ↔ 선수 연결도 지워지고, 되돌릴 수 없습니다.\n이미 기록한 랠리와 받은 영상은 그대로 남습니다. 지울까요?')) return;
+  let r; try { r = await aiApi('POST', '/jobs/clear', {}); } catch (e) { r = { ok: false, body: {} }; }
+  if (!r.ok) { toast(r.body.error || '서버에 연결할 수 없어 지우지 못했습니다'); return; }
+  const kept = (r.body.kept || []).includes(ai.job);
+  aiCur = null; aiStopSpan(); aiRes = null; aiCandKey = '';
+  if (!kept) { ai.job = null; aiJob = null; }
+  ai.done = {}; ai.map = {}; aiSave(); render();
+  toast(`AI 분석 결과를 모두 지웠습니다 (파일 ${r.body.deleted || 0}개)` + ((r.body.kept || []).length ? ' · 진행 중인 분석은 남김' : ''));
+};
 $('aiStop').onclick = () => { aiCur = null; aiStopSpan(); render(); };
 if (ai.open) { $('aiBox').open = true; aiPing(true); }
 

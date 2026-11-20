@@ -14,6 +14,7 @@ API
   GET  /jobs/<id>                  진행률 · 결과(이벤트)
   POST /jobs/<id>/cancel           분석 취소
   GET  /jobs/<id>/excel            엑셀 리포트 내려받기
+  POST /jobs/clear                 끝난 분석 결과 전체 삭제 (JSON · 엑셀, 돌아가는 분석은 그대로)
 """
 from __future__ import annotations
 
@@ -407,6 +408,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({k: v[k] for k in v if k != 'path'})
             if parts == ['jobs']:
                 return self._json(job_public(start_job(body), False))
+            if parts == ['jobs', 'clear']:
+                return self._json(clear_results())
             if len(parts) == 3 and parts[0] == 'jobs' and parts[2] == 'cancel':
                 job = jobs.get(parts[1])
                 if not job:
@@ -419,6 +422,23 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as e:  # noqa: BLE001
             traceback.print_exc()
             return self._err(500, str(e)[:300])
+
+
+def clear_results() -> dict:
+    """끝난(완료 · 취소 · 실패) 분석 결과를 모두 지운다. 돌아가거나 기다리는 분석은 남김"""
+    keep = {i for i, j in jobs.items() if j['status'] in ('queued', 'running')}
+    for i in [i for i in jobs if i not in keep]:
+        del jobs[i]
+    n = 0
+    for f in RES_DIR.glob('*'):
+        if f.is_file() and f.suffix.lower() in ('.json', '.xlsx') and f.stem not in keep:
+            try:
+                f.unlink()
+                n += 1
+            except OSError:
+                pass
+    log('분석 결과 전체 삭제', f'파일 {n}개' + (f' · 진행 중 {len(keep)}개는 남김' if keep else ''))
+    return {'deleted': n, 'kept': sorted(keep)}
 
 
 def main():
