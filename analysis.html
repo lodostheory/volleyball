@@ -182,6 +182,10 @@ details.aibox>summary small{font-weight:600;color:var(--muted);font-size:12px}
 .cands button{text-align:left;background:var(--panel2);border-radius:8px;padding:5px 9px;font-size:12.5px}
 .cands button.done{opacity:.5} .cands button.skip{opacity:.35;text-decoration:line-through}
 .cands button.on{outline:1.5px solid var(--accent);color:var(--accent);opacity:1}
+.cands .cand{display:flex;gap:3px}
+.cands .cand>button[data-i]{flex:1;min-width:0}
+.cands button.cx{flex:none;width:30px;padding:0;text-align:center;color:var(--muted);opacity:1;text-decoration:none}
+.cands button.cx:hover{color:#fff;background:var(--bad,#c0392b)}
 .aimap{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:4px 10px;margin-top:6px}
 .aimap label{display:flex;gap:6px;align-items:center;font-size:12px}
 .aimap select{height:30px;font-size:12px;flex:1}
@@ -1601,7 +1605,7 @@ function renderAI() {
   aiCandKey = key;
   $('aiCands').innerHTML = aiRes.events.map((e, i) => {
     const s = aiSideIdx(e.side), m = ai.map[e.track], who = m && m.s === s ? ' → ' + esc(pLabel(s, m.p)) : '';
-    return `<button data-i="${i}" class="${i === aiCur ? 'on' : ai.done[i] === 1 ? 'done' : ai.done[i] === 2 ? 'skip' : ''}">${i + 1}. ${fmtT(e.t)} · <span class="${s ? 'dotA' : 'dotH'}"></span>${esc(tName(s))} ${SKN[e.sk]} · T${e.track}${who}${ai.done[i] === 1 ? ' ✓' : ''}</button>`;
+    return `<div class="cand"><button data-i="${i}" class="${i === aiCur ? 'on' : ai.done[i] === 1 ? 'done' : ai.done[i] === 2 ? 'skip' : ''}">${i + 1}. ${fmtT(e.t)} · <span class="${s ? 'dotA' : 'dotH'}"></span>${esc(tName(s))} ${SKN[e.sk]} · T${e.track}${who}${ai.done[i] === 1 ? ' ✓' : ''}</button><button class="cx" data-x="${i}" title="이 후보 삭제 (서버 결과에서 지움)" aria-label="${i + 1}번 후보 삭제">✕</button></div>`;
   }).join('');
   const cur = $('aiCands').querySelector('.on'); if (cur) cur.scrollIntoView({ block: 'nearest' });
   const tracks = Object.entries(aiRes.tracks || {}).filter(([, t]) => t.touches > 0).sort((a, b) => b[1].touches - a[1].touches).slice(0, 40);
@@ -1634,7 +1638,25 @@ $('aiTiles').onchange = () => { ai.tiles = $('aiTiles').checked; aiSave(); };
 $('aiAutoPos').onchange = () => { ai.autoPos = $('aiAutoPos').checked; aiSave(); };
 $('aiReview').onclick = () => aiCur != null ? (ai.done[aiCur] = ai.done[aiCur] || 2, aiSave(), aiNext()) : aiNext();
 $('aiExcel').onclick = () => { if (ai.job) window.open(`${aiBase()}/jobs/${ai.job}/excel`, '_blank'); };
-$('aiCands').addEventListener('click', e => { const b = e.target.closest('button[data-i]'); if (b) aiFocus(+b.dataset.i); });
+$('aiCands').addEventListener('click', e => {
+  const x = e.target.closest('button[data-x]'); if (x) { aiDelCand(+x.dataset.x); return; }
+  const b = e.target.closest('button[data-i]'); if (b) aiFocus(+b.dataset.i);
+});
+let aiDelBusy = false;
+async function aiDelCand(i) {                // 후보 하나 삭제: 서버 결과에서 지우고 검토 표시(done)도 한 칸씩 당김
+  if (aiDelBusy || !aiRes || !ai.job || !aiRes.events[i]) return;
+  const ev = aiRes.events[i];
+  aiDelBusy = true;
+  let r; try { r = await aiApi('POST', `/jobs/${ai.job}/events/delete`, { index: i, t: ev.t }); } catch (e) { r = { ok: false, body: {} }; }
+  aiDelBusy = false;
+  if (!r.ok) { toast(r.body.error || '서버에 연결할 수 없어 지우지 못했습니다'); return; }
+  aiRes.events.splice(i, 1);
+  const done = {}; for (const [k, v] of Object.entries(ai.done)) { const n = +k; if (n < i) done[n] = v; else if (n > i) done[n - 1] = v; }
+  ai.done = done;
+  if (aiCur === i) { aiCur = null; aiStopSpan(); } else if (aiCur != null && aiCur > i) aiCur--;
+  aiSave(); aiCandKey = ''; render();
+  toast(`${i + 1}번 후보(${fmtT(ev.t)} ${SKN[ev.sk] || ''})를 지웠습니다 · 남은 후보 ${aiRes.events.length}개`);
+}
 $('aiMap').addEventListener('change', e => {
   const s = e.target.closest('select[data-tid]'); if (!s) return;
   if (s.value) { const [a, b] = s.value.split(':').map(Number); ai.map[s.dataset.tid] = { s: a, p: b }; } else delete ai.map[s.dataset.tid];

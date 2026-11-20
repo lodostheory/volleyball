@@ -14,6 +14,7 @@ API
   GET  /jobs/<id>                  진행률 · 결과(이벤트)
   POST /jobs/<id>/cancel           분석 취소
   GET  /jobs/<id>/excel            엑셀 리포트 내려받기
+  POST /jobs/<id>/events/delete {index, t}  후보 하나 삭제 (JSON · 엑셀 다시 저장)
   POST /jobs/clear                 끝난 분석 결과 전체 삭제 (JSON · 엑셀, 돌아가는 분석은 그대로)
 """
 from __future__ import annotations
@@ -410,6 +411,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(job_public(start_job(body), False))
             if parts == ['jobs', 'clear']:
                 return self._json(clear_results())
+            if len(parts) == 4 and parts[0] == 'jobs' and parts[2:] == ['events', 'delete']:
+                return self._json(delete_event(parts[1], body))
             if len(parts) == 3 and parts[0] == 'jobs' and parts[2] == 'cancel':
                 job = jobs.get(parts[1])
                 if not job:
@@ -422,6 +425,39 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as e:  # noqa: BLE001
             traceback.print_exc()
             return self._err(500, str(e)[:300])
+
+
+def delete_event(job_id: str, body: dict) -> dict:
+    """끝난 분석 결과에서 후보(터치 이벤트) 하나를 지우고 JSON · 엑셀을 다시 저장한다.
+    t(시각)가 그 자리 후보와 맞을 때만 지운다 — 다른 화면에서 먼저 지워 순서가 바뀐 경우를 막음"""
+    if not re.fullmatch(r'[0-9a-f]{10}', job_id):
+        raise ValueError('작업 번호가 이상합니다')
+    f = RES_DIR / f'{job_id}.json'
+    job = jobs.get(job_id)
+    if job and job['status'] in ('queued', 'running'):
+        raise ValueError('분석이 끝난 뒤에 지울 수 있습니다')
+    res = job.get('result') if job else None
+    if res is None:
+        if not f.exists():
+            raise ValueError('분석 결과가 없습니다')
+        res = json.loads(f.read_text(encoding='utf-8'))
+    evs = res.get('events') or []
+    i = int(body.get('index', -1))
+    if not 0 <= i < len(evs):
+        raise ValueError('그런 후보가 없습니다')
+    if body.get('t') is not None and abs(float(evs[i].get('t', 0)) - float(body['t'])) > 0.01:
+        raise ValueError('후보 목록이 바뀌었습니다. 결과를 다시 불러오세요')
+    gone = evs.pop(i)
+    f.write_text(json.dumps(res, ensure_ascii=False), encoding='utf-8')
+    try:
+        va.save_excel(res, str(RES_DIR / f'{job_id}.xlsx'))
+    except Exception:  # noqa: BLE001  엑셀이 열려 있으면 못 씀 — JSON 은 이미 저장됨
+        traceback.print_exc()
+    if job:
+        job['result'] = res
+        job['message'] = f"터치 {len(evs)}개"
+    log('후보 삭제', f"{job_id} #{i + 1} ({gone.get('t')}초) · 남은 후보 {len(evs)}개")
+    return {'ok': True, 'events': len(evs)}
 
 
 def clear_results() -> dict:
