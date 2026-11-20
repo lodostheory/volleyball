@@ -367,7 +367,12 @@ details.aibox>summary small{font-weight:600;color:var(--muted);font-size:12px}
     <div class="row" style="margin-top:8px">
       <button class="btn" id="bTime">⏱ 랠리 시작 = 지금</button>
       <span class="muted" id="tLabel"></span>
-      <button class="btn" id="bReset" style="margin-left:auto">기본 위치</button>
+      <button class="btn" id="bReset" style="margin-left:auto" title="저장해 둔 기본 위치로 18명을 옮김">기본 위치</button>
+    </div>
+    <div class="row" style="margin-top:6px;justify-content:flex-end">
+      <span class="muted" id="baseState" style="margin-right:auto"></span>
+      <button class="btn sm" id="bSaveBase" title="지금 보드의 18명 배치를 기본 위치로 저장 (이 기기)">📌 지금 배치를 기본 위치로</button>
+      <button class="btn sm" id="bClearBase" title="기본 위치를 처음 배치(3×3)로 되돌림">처음 값</button>
     </div>
   </section>
 
@@ -410,7 +415,11 @@ const FINE = matchMedia('(pointer: fine)').matches;
    랠리 = { t: 영상 시각, pos: 18명 위치, acts: 동작들, win: 득점 팀(0 우리 / 1 상대), why, by: 득점 선수 }
    동작 = { side, p: 명단 자리(0~8), sk: S·R·E·A·B·D·F, ev: # + ! - / =, t: 영상 시각, from?/to?: 보드 좌표 } */
 const GRID = [[20,15],[50,15],[80,15],[20,48],[50,48],[80,48],[20,80],[50,80],[80,80]];
-const BASE_POS = [...GRID.map(([x, y]) => [x, 100 + y]), ...GRID.map(([x, y]) => [100 - x, 100 - y])];
+const DEFAULT_POS = [...GRID.map(([x, y]) => [x, 100 + y]), ...GRID.map(([x, y]) => [100 - x, 100 - y])];   // 처음 배치(3×3)
+// 기본 위치: 사용자가 「지금 배치를 기본 위치로」 저장한 배치(이 기기 브라우저). 없으면 처음 배치
+const BASE_KEY = 'vollyball-mania.analysis.base';
+const validPos = p => Array.isArray(p) && p.length === 18 && p.every(q => Array.isArray(q) && q.length === 2 && q.every(v => typeof v === 'number' && isFinite(v)));
+let BASE_POS = (() => { try { const p = JSON.parse(localStorage.getItem(BASE_KEY)); return validPos(p) ? p : DEFAULT_POS; } catch (e) { return DEFAULT_POS; } })();
 const WHY = { atk: '공격', blk: '블로킹', srv: '서브', err: '상대 범실' };
 const SKN = { S: '서브', R: '리시브', E: '토스', A: '공격', B: '블로킹', D: '디그', F: '프리볼' };
 const EVN = { '#': '완벽·득점', '+': '좋음', '!': '보통', '-': '나쁨', '/': '차단·넘어감', '=': '범실' };
@@ -950,6 +959,17 @@ $('clipList').addEventListener('click', e => {
 /* ---------- 버튼들 ---------- */
 $('bTime').onclick = () => { const t = vNow(); if (t == null) { toast('먼저 영상을 불러오세요'); return; } draft.t = Math.max(0, Math.round(t)); render(); };
 $('bReset').onclick = () => { draft.pos = clone(BASE_POS); render(); };
+$('bSaveBase').onclick = () => {
+  BASE_POS = clone(draft.pos);
+  try { localStorage.setItem(BASE_KEY, JSON.stringify(BASE_POS)); } catch (e) {}
+  render(); toast('지금 배치를 기본 위치로 저장했습니다');
+};
+$('bClearBase').onclick = () => {
+  if (BASE_POS === DEFAULT_POS || !confirm('저장한 기본 위치를 지우고 처음 배치(3×3)로 되돌릴까요?')) return;
+  BASE_POS = DEFAULT_POS;
+  try { localStorage.removeItem(BASE_KEY); } catch (e) {}
+  render(); toast('기본 위치를 처음 배치로 되돌렸습니다');
+};
 $('pHome').onclick = () => manualPoint(0);
 $('pAway').onclick = () => manualPoint(1);
 $('by').onchange = () => { draft.by = $('by').value; persist(); };
@@ -1029,6 +1049,8 @@ function render() {
   $('pAway').textContent = `${tName(1)} 득점` + (draft.edit != null ? ' (수정 저장)' : '');
   $('pHome').disabled = $('pAway').disabled = draft.edit == null && W.over;
   $('editRow').classList.toggle('hide', draft.edit == null);
+  $('baseState').textContent = BASE_POS === DEFAULT_POS ? '기본 위치: 처음 배치(3×3)' : '기본 위치: 내가 저장한 배치';
+  $('bClearBase').disabled = BASE_POS === DEFAULT_POS;
   $('tLabel').textContent = draft.t != null ? '시작 ' + fmtT(draft.t) : '(비우면 첫 동작 3초 전)';
   // 패드
   $('padSide').innerHTML = `<button class="h${pad.side === 0 ? ' on' : ''}" data-side="0">${esc(tName(0))}</button><button class="a${pad.side === 1 ? ' on' : ''}" data-side="1">${esc(tName(1))}</button>`;
