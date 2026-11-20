@@ -1147,7 +1147,7 @@ $('bSave').onclick = async () => {
            : '이 경기를 저장할 때 정한 비밀번호를 입력하세요.');
   if (!pw) return;
   const b = $('bSave'); b.disabled = true;
-  let r; try { r = await api('PUT', '/matches/' + encodeURIComponent(name), { password: pw, create, data: M }); } catch (e) { r = { ok: false, status: 0, body: {} }; }
+  let r; try { r = await api('PUT', '/matches/' + encodeURIComponent(name), { password: pw, create, data: BASE_POS === DEFAULT_POS ? M : { ...M, base: BASE_POS } }); } catch (e) { r = { ok: false, status: 0, body: {} }; }
   b.disabled = false;
   if (!r.ok) {
     if (r.status === 401) { delete pws[name]; lsSet(PW_KEY, pws); }
@@ -1181,9 +1181,11 @@ async function loadMatch(name) {
   let r; try { r = await api('GET', '/matches/' + encodeURIComponent(name)); } catch (e) { r = { ok: false }; }
   if (!r.ok) { toast('경기를 불러오지 못했습니다'); return; }
   M = upgrade(r.body.data); serverName = r.body.name; dirty = false; $('mName').value = serverName;
+  const sb = r.body.data && r.body.data.base, baseLoaded = validPos(sb);   // 경기에 저장된 기본 위치가 있으면 이 기기의 기본 위치로
+  if (baseLoaded) { BASE_POS = sb; try { localStorage.setItem(BASE_KEY, JSON.stringify(sb)); } catch (e) {} }
   resetView(); closeSheet(); renderRoster(); render();
   $('vUrl').value = M.video || ''; if (M.video) loadVideo(M.video, true);
-  toast(`「${serverName}」 불러왔습니다`);
+  toast(`「${serverName}」 불러왔습니다` + (baseLoaded ? ' · 기본 위치도 적용' : ''));
 }
 $('bNew').onclick = () => {
   if (dirty && M.rallies.length && !confirm('저장하지 않은 기록이 있습니다. 새 경기를 시작할까요? (팀 이름과 명단은 그대로 둡니다)')) return;

@@ -86,7 +86,12 @@ function cleanMatch(d) {
       by: idx(r.by) ? r.by : null,
     });
   }
-  return { v: 2, home, away, video: str(d.video, 300), setPoints: [15, 21, 25].includes(d.setPoints) ? d.setPoints : 21, rallies };
+  const out = { v: 2, home, away, video: str(d.video, 300), setPoints: [15, 21, 25].includes(d.setPoints) ? d.setPoints : 21, rallies };
+  if (d.base != null) {                      // 보드 기본 위치(18명) — 없으면 생략
+    if (!Array.isArray(d.base) || d.base.length !== 18 || !d.base.every(pt)) return null;
+    out.base = d.base;
+  }
+  return out;
 }
 const idx = v => Number.isInteger(v) && v >= 0 && v <= 8;
 const OLD_RESULT = { kill: '#', err: '=', blk: '/', cont: '-' };
