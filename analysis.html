@@ -25,20 +25,23 @@ input:focus,select:focus{outline:none;border-color:var(--accent)}
 .side{display:contents}
 @media (min-width:980px){
   /* 보드 열은 좁게(화면 폭의 약 27%), 선수별 기록은 왼쪽 열에서 보드 옆에 보이게 */
-  .layout{grid-template-columns:minmax(0,1fr) clamp(300px,27vw,420px);
+  .layout{grid-template-columns:minmax(0,1fr) clamp(300px,27vw,460px);
     grid-template-areas:"bar side" "video side" "ai side" "player side" "scout side" "rallies side" "stats side" "roster side";align-items:start}
   /* 오른쪽: 점수판을 보드 바로 위에, 둘을 함께 화면에 고정 */
   .side{grid-area:side;display:flex;flex-direction:column;gap:10px;position:sticky;top:10px;max-height:calc(100vh - 20px);overflow-y:auto;scrollbar-width:thin}
-  .side .card{padding:10px}
+  .side .card{padding:8px 10px}
+  .side{gap:7px}
   .side .pts{font-size:34px;min-width:42px}
   .side .setw b{font-size:18px}
   .side .score .team input{font-size:14px;padding:0 6px;height:34px}
   .side .sets{margin-top:6px} .side .status{margin-top:4px;font-size:13px}
-  .side #svg{max-height:max(360px,calc((100vh - 470px) * 1.2))}   /* 코트를 20% 크게 (보드 아래 버튼을 줄여 화면 높이 안에 최대한) */
+  .side #svg{max-height:max(396px,min(calc((100vh - 470px) * 1.32),calc(100vh - 340px)))}   /* 코트를 처음보다 32% 크게 (20% → 10% 더) · 보드 아래 버튼을 줄여 화면 높이 안에 최대한 */
   .side #hint{font-size:11.5px;line-height:1.35;margin-top:2px!important}
   .side .a-board .row{margin-top:5px!important;gap:5px}
   .side .a-board .row .btn{min-height:30px;height:30px;padding:0 9px;font-size:12.5px}
   .side .a-board .row .muted{font-size:11.5px}
+  .side #baseState{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .side .a-board .row:last-child{flex-wrap:nowrap}
 }
 .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px;min-width:0}
 .card h2{margin:0 0 8px;font-size:15px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
@@ -435,7 +438,7 @@ details.aibox>summary small{font-weight:600;color:var(--muted);font-size:12px}
     </div>
     <div class="row" style="margin-top:6px;justify-content:flex-end">
       <span class="muted" id="baseState" style="margin-right:auto"></span>
-      <button class="btn sm" id="bSaveBase" title="지금 보드의 18명 배치를 기본 위치로 저장 (이 기기)">📌 지금 배치를 기본 위치로</button>
+      <button class="btn sm" id="bSaveBase" title="지금 보드의 18명 배치를 기본 위치로 저장 (이 기기)">📌 기본 위치로 저장</button>
       <button class="btn sm" id="bClearBase" title="기본 위치를 처음 배치(3×3)로 되돌림">처음 값</button>
     </div>
   </section>
