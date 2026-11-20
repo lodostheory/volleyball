@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>VOLLEYBALL MANIA</title>
+<meta name="description" content="배구 경기 영상 분석 · 배구 게임">
+<meta name="theme-color" content="#0b1d2a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="VB MANIA">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-180.png">
+<style>
+:root{
+  --bg:#0b1d2a; --panel:#122a3a; --line:#2a5068;
+  --text:#eef6fb; --muted:#8fb0c4; --accent:#ffb020; --accent-ink:#2a1a00;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard","Noto Sans KR","Malgun Gothic",sans-serif;
+  overscroll-behavior:none;-webkit-user-select:none;user-select:none;touch-action:manipulation}
+body{position:fixed;inset:0;overflow:hidden}
+button{font:inherit;color:inherit;border:0;cursor:pointer}
+.app{
+  height:100dvh;display:flex;flex-direction:column;
+  padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+header{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px 16px 6px}
+h1{margin:0;font-size:21px;font-weight:900;font-style:italic;letter-spacing:.5px;white-space:nowrap;
+  background:linear-gradient(90deg,#fff 0%,var(--accent) 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
+h1 span{letter-spacing:2px}
+/* 탭: 경기 분석(analysis.html) / 배구 게임(game.html) — 처음 열 때 iframe 으로 불러온다 */
+.tabs{flex:1 0 100%;display:flex;gap:4px;padding:3px;border-radius:12px;background:var(--panel);border:1px solid var(--line)}
+.tab{flex:1;height:34px;border-radius:9px;background:transparent;color:var(--muted);font-size:14px;font-weight:800;white-space:nowrap}
+.tab[aria-selected="true"]{background:var(--accent);color:var(--accent-ink)}
+.frameview{display:none;flex:1 1 0;min-height:0;position:relative}
+.frameview.on{display:block}
+.frameview iframe{position:absolute;inset:0;width:100%;height:100%;border:0;display:block;background:var(--bg)}
+/* 가로로 넓은 화면: 제목과 탭을 한 줄로 */
+@media (min-aspect-ratio: 5/4){
+  header{flex-wrap:nowrap;padding:6px 16px;gap:16px}
+  h1{font-size:20px}
+  .tabs{flex:0 1 360px}
+}
+@media (min-width:600px) and (max-aspect-ratio: 5/4){
+  h1{font-size:26px} .tab{height:40px;font-size:16px}
+}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <header>
+    <h1>VOLLEYBALL <span>MANIA</span></h1>
+    <nav class="tabs" role="tablist" aria-label="화면 선택">
+      <button class="tab" role="tab" data-tab="analysis" aria-selected="true">📹 경기 분석</button>
+      <button class="tab" role="tab" data-tab="game" aria-selected="false">🎮 게임</button>
+    </nav>
+  </header>
+  <section class="frameview" id="view-analysis" data-src="analysis.html" aria-label="경기 영상 분석"></section>
+  <section class="frameview" id="view-game" data-src="game.html" aria-label="배구 게임"></section>
+</div>
+
+<script>
+(() => {
+'use strict';
+const $ = id => document.getElementById(id);
+const TABS = ['analysis', 'game'];
+const tabBtns = [...document.querySelectorAll('.tab')];
+const frames = {};            // 탭 이름 → iframe
+let curTab = null;
+const toGame = m => {          // 같은 출처면 바로 호출(키 눌림·뗌 순서 보장), 아니면 postMessage
+  const f = frames.game; if (!f) return;
+  const w = f.contentWindow;
+  try { if (typeof w.vbMsg === 'function') { w.vbMsg(m); return; } } catch (e) {}
+  try { w.postMessage(m, '*'); } catch (e) {}
+};
+function focusGame() { const f = frames.game; if (!f || curTab !== 'game') return; try { f.focus(); f.contentWindow.focus(); } catch (e) {} }
+function setTab(tab) {
+  if (!TABS.includes(tab)) tab = 'analysis';     // 해시가 없거나 예전 주소(#formation)면 경기 분석
+  tabBtns.forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === tab)));
+  if (tab === curTab) { focusGame(); return; }
+  const prev = curTab; curTab = tab;
+  if (prev === 'game') toGame({ vb: 'hide' });   // 게임 탭을 떠나면 게임을 일시정지
+  document.querySelectorAll('.frameview').forEach(v => v.classList.toggle('on', v.id === 'view-' + tab));
+  if (!frames[tab]) {
+    const view = $('view-' + tab), f = document.createElement('iframe');
+    f.title = view.getAttribute('aria-label');
+    f.allow = 'fullscreen; autoplay; encrypted-media; picture-in-picture; local-network-access; local-network; loopback-network';   // 분석 탭이 이 PC 의 AI 서버(127.0.0.1)에 붙을 수 있게
+    f.setAttribute('allowfullscreen', '');
+    if (tab === 'game') f.addEventListener('load', focusGame);
+    f.src = view.dataset.src;
+    view.appendChild(f); frames[tab] = f;
+  } else if (tab === 'game') toGame({ vb: 'show' });
+  focusGame();
+  try { history.replaceState(null, '', location.pathname + location.search + '#' + tab); } catch (e) {}
+}
+tabBtns.forEach(b => b.onclick = () => setTab(b.dataset.tab));
+// 게임 탭에서 포커스가 게임 바깥(탭 버튼 등)에 있을 때 누른 키도 게임으로 보낸다
+const fwdKey = e => {
+  if (!frames.game || curTab !== 'game') return;
+  if (e.ctrlKey || e.metaKey || e.altKey || e.key === 'Tab' || /^F\d+$/.test(e.key)) return;
+  if (e.target && e.target.tagName === 'BUTTON' && (e.key === 'Enter' || e.key === ' ')) return;
+  e.preventDefault();
+  toGame({ vb: 'key', down: e.type === 'keydown', code: e.code, repeat: e.repeat });
+  if (e.type === 'keydown') focusGame();
+};
+addEventListener('keydown', fwdKey);
+addEventListener('keyup', fwdKey);
+document.addEventListener('gesturestart', e => e.preventDefault());
+document.addEventListener('dblclick', e => e.preventDefault());
+setTab(location.hash.slice(1));
+
+if ('serviceWorker' in navigator && location.protocol === 'https:') {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+})();
+</script>
+</body>
+</html>

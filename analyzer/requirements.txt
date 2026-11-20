@@ -1,0 +1,11 @@
+# 배구 영상 인식 서버 라이브러리
+# NVIDIA GPU 가 있으면 이 파일보다 먼저 GPU 판 PyTorch 를 설치하세요 (run_server.bat 가 자동으로 함):
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126
+ultralytics>=8.3
+opencv-python>=4.9
+numpy
+pandas
+openpyxl
+yt-dlp[default]
+lap>=0.5.12
+av>=12
