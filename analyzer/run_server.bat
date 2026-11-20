@@ -28,6 +28,18 @@ if not exist ".venv\Scripts\python.exe" (
   )
 )
 
+rem ---- 켤 때마다: 새로 추가된 라이브러리(예: 영상 자르기용 PyAV)가 빠져 있으면 설치 ----
+".venv\Scripts\python.exe" -c "import av, cv2, ultralytics, yt_dlp, pandas, openpyxl, lap, numpy" >nul 2>nul
+if errorlevel 1 (
+  echo [설치] 빠진 라이브러리를 설치합니다...
+  ".venv\Scripts\python.exe" -m pip install -r requirements.txt
+  if errorlevel 1 (
+    echo 라이브러리 설치에 실패했습니다. 인터넷 연결을 확인한 뒤 다시 실행하세요.
+    pause
+    exit /b 1
+  )
+)
+
 rem ---- 서버 실행 (이 창을 닫으면 꺼짐) ----
 ".venv\Scripts\python.exe" -u server.py %*
 pause
