@@ -10,7 +10,7 @@
 ## 휴대폰에서 실행하기 (GitHub Pages)
 
 1. GitHub Pages 는 `gh-pages` 브랜치로 게시됨. `main` 에 올리면 `.github/workflows/pages.yml` 이 자동으로 `gh-pages` 에 반영
-2. 휴대폰 브라우저에서 `https://lodostheory.github.io/vollyball/` 접속 (반영까지 1~2분)
+2. 휴대폰 브라우저에서 `https://lodostheory.github.io/volleyball/` 접속 (반영까지 1~2분)
 3. 아이폰: Safari 공유 버튼 → **홈 화면에 추가** / 갤럭시: Chrome 메뉴 → **홈 화면에 추가**
 
 ## 서버 (Cloudflare Worker)
@@ -22,7 +22,7 @@
 
 ## 경기 영상 분석 탭
 
-- **📹 경기 분석** 탭(`analysis.html`, 바로 열기 `https://lodostheory.github.io/vollyball/#analysis`)에서 유튜브 경기 영상을 보면서 득점마다 기록
+- **📹 경기 분석** 탭(`analysis.html`, 바로 열기 `https://lodostheory.github.io/volleyball/#analysis`)에서 유튜브 경기 영상을 보면서 득점마다 기록
 - 영상 자동 인식은 하지 않음(유튜브가 영상 읽기를 막음). 전력분석 프로그램(DataVolley · VolleyStation)처럼 **영상을 보면서 코드로 동작을 하나씩 기록**하는 방식
 - **코드 입력**: `[팀] 등번호 동작 [평가] [구역]` — 팀은 없음 = 우리, `a` = 상대 / 동작 `S` 서브 · `R` 리시브 · `E` 토스 · `A` 공격 · `B` 블로킹 · `D` 디그 · `F` 프리볼 / 평가 `#` 완벽·득점 · `+` 좋음 · `!` 보통 · `-` 나쁨 · `/` 차단당함·넘어감 · `=` 범실
   - 예: `7S+ a12R- a5E a9A#46` (구역 숫자를 붙이면 보드에 화살표 자동). 한글 입력 상태로 쳐도 됨(ㄴ → S)
@@ -43,7 +43,7 @@
 ## 배구 게임 탭
 
 - **🎮 게임** 탭에서 2D 아케이드 배구 게임 「THUNDER VOLLEY」(6인제, 1920×1080 화면)를 할 수 있음. 게임 파일은 `game.html` 이며 탭은 이를 iframe 으로 불러옴
-- 바로 열기: `https://lodostheory.github.io/vollyball/#game` (탭 포함) 또는 `https://lodostheory.github.io/vollyball/game.html` (게임만)
+- 바로 열기: `https://lodostheory.github.io/volleyball/#game` (탭 포함) 또는 `https://lodostheory.github.io/volleyball/game.html` (게임만)
 - 모드: 1P vs CPU · 2P 대전(키보드 하나로 둘이) · CPU vs CPU, CPU 난이도 EASY/NORMAL/HARD, 15점 3세트 2선승
 - 키보드: ←→ 또는 A/D 이동, Z · Space · F = HIT(서브 · 리시브 · 토스 · 스파이크), X · G = JUMP, P 일시정지, ESC 타이틀
   - 2P 대전: 1P는 A/D · F(HIT) · G(JUMP), 2P는 ←/→ · K(HIT) · L(JUMP)

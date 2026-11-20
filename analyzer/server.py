@@ -282,7 +282,7 @@ class Handler(BaseHTTPRequestHandler):
                         f'<p><a href="/app/#analysis" style="display:inline-block;padding:12px 18px;border-radius:10px;background:#ffb020;color:#2a1a00;'
                         f'font-weight:800;text-decoration:none">▶ 경기 분석 화면 열기 (이 PC 서버에서)</a></p>'
                         f'<p>이 주소로 열면 화면과 분석 서버가 같은 주소라 브라우저 권한 없이 「🤖 AI 영상 인식」이 바로 연결됩니다.<br>'
-                        f'<a href="https://lodostheory.github.io/vollyball/#analysis" style="color:#ffb020">공개 사이트</a>에서도 쓸 수 있지만, '
+                        f'<a href="https://lodostheory.github.io/volleyball/#analysis" style="color:#ffb020">공개 사이트</a>에서도 쓸 수 있지만, '
                         f'브라우저가 공개 사이트의 PC 접근을 막으면 연결되지 않습니다.<br>서버를 실행한 창을 닫으면 서버가 꺼집니다.</p>')
                 return self._send(200, html.encode('utf-8'), 'text/html; charset=utf-8')
             if parts[0] == 'app':
