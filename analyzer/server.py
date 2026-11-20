@@ -1,7 +1,7 @@
 """배구 영상 인식 로컬 서버 — 사이트의 「📹 경기 분석」 탭이 이 서버를 불러 씁니다.
 
 실행: run_server.bat 더블클릭 (처음 한 번은 라이브러리를 설치)  또는  python server.py [--port 8765]
-이 PC 안(127.0.0.1)에서만 열리고, VOLLYBALL MANIA 사이트와 이 PC 의 주소에서 온 요청만 받습니다.
+이 PC 안(127.0.0.1)에서만 열리고, VOLLEYBALL MANIA 사이트와 이 PC 의 주소에서 온 요청만 받습니다.
 
 API
   GET  /health                     서버·장치 상태

@@ -1,4 +1,4 @@
-"""배구 경기 영상 인식 파이프라인 (VOLLYBALL MANIA 분석 서버의 핵심)
+"""배구 경기 영상 인식 파이프라인 (VOLLEYBALL MANIA 분석 서버의 핵심)
 
   ① 코트 네 모서리 → 실제 코트(m) 원근 변환(Homography), 코트 밖 관중·대기 선수 가리기(ROI 마스크)
   ② YOLO 포즈(17관절) + ByteTrack 으로 선수마다 track_id 를 유지

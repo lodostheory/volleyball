@@ -1,4 +1,4 @@
-// VOLLYBALL MANIA 팀 저장 서버 (Cloudflare Workers + KV)
+// VOLLEYBALL MANIA 팀 저장 서버 (Cloudflare Workers + KV)
 //   GET  /teams          팀 목록
 //   GET  /teams/:name    팀의 저장된 위치
 //   PUT  /teams/:name    { password, data } — 없으면 새로 만들고, 있으면 비밀번호 확인 후 덮어씀

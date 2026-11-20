@@ -1,4 +1,4 @@
-# VOLLYBALL MANIA
+# VOLLEYBALL MANIA
 
 배구 **경기 영상 분석**과 2D 아케이드 **배구 게임**을 담은 웹앱입니다.
 
