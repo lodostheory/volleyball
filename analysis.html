@@ -1314,7 +1314,11 @@ function aiWaitVideo() {
     renderAI();
     if (aiVideo && (aiVideo.status === 'downloading' || aiVideo.status === 'trimming')) aiWaitVideo();
     else if (aiVideo && aiVideo.status === 'ready') {
-      if (aiTrimming) { aiTrimming = false; toast(aiVideo.error ? aiVideo.error : `잘라 냈습니다 · ${fmtT(aiVideo.offset || 0)} ~ ${fmtT((aiVideo.offset || 0) + aiVideo.duration)} 남김`); }
+      if (aiTrimming) {
+        aiTrimming = false;
+        if (!aiVideo.error) aiSpanToTrim();
+        toast(aiVideo.error ? aiVideo.error : `잘라 냈습니다 · ${fmtT(aiVideo.offset || 0)} ~ ${fmtT((aiVideo.offset || 0) + aiVideo.duration)} 남김 · 분석 구간도 이 부분으로 맞췄습니다`);
+      }
       else toast('영상을 받았습니다 · 코트 모서리를 찍어 주세요');
       aiGetFrame(vNow() || aiVideo.offset || 0);
     }
@@ -1344,10 +1348,20 @@ async function aiTrim() {
   if (!r.ok) { toast(r.body.error || '자르지 못했습니다'); return; }
   aiVideo = r.body; aiTrimming = true; ai.trimS = ''; ai.trimE = ''; aiSave(); renderAI(); aiWaitVideo();
 }
+function aiTrimBounds() {                    // 잘라 낸 뒤 남은 부분(유튜브 시각, 초 단위로 안쪽으로 맞춤)
+  const lo = aiVideo && aiVideo.offset || 0, d = aiVideo && aiVideo.duration;
+  return d ? [fmtT(Math.ceil(lo)), fmtT(Math.floor(lo + d))] : null;
+}
+function aiSpanToTrim() {                     // 분석 구간을 잘라 낸 부분으로
+  const b = aiTrimBounds(); if (!b) return;
+  [ai.start, ai.end] = b; ai.autoSpan = b; aiSave(); renderAI();
+}
 async function aiRefetch() {
   if (!confirm('잘라 낸 영상을 지우고 원본을 처음부터 다시 받을까요?')) return;
   let r; try { r = await aiApi('POST', '/videos', { url: M.video, force: true }); } catch (e) { r = { ok: false, body: {} }; }
   if (!r.ok) { toast(r.body.error || '다시 받지 못했습니다'); return; }
+  if (ai.autoSpan && ai.start === ai.autoSpan[0] && ai.end === ai.autoSpan[1]) { ai.start = ''; ai.end = ''; }   // 자동으로 맞춘 구간이면 원본 전체로
+  ai.autoSpan = null; aiSave();
   aiVideo = r.body; renderAI(); aiWaitVideo();
 }
 async function aiGetFrame(t) {
@@ -1530,6 +1544,8 @@ function renderAI() {
   }
   // 3. 분석
   for (const [id, k] of [['aiNear', 'near'], ['aiCourt', 'court'], ['aiFps', 'fps'], ['aiModel', 'model'], ['aiStart', 'start'], ['aiEnd', 'end']]) if (document.activeElement !== $(id)) $(id).value = String(ai[k] ?? '');
+  { const b = aiVideo && aiVideo.offset > 0.05 && aiTrimBounds();
+    $('aiStart').placeholder = b ? b[0] : '0:00'; $('aiEnd').placeholder = b ? b[1] : '끝까지'; }
   { const sp = aiSpanOf(); $('aiSpan').textContent = sp.err ? '⚠ ' + sp.err : `${fmtT(sp.start)} ~ ${sp.end != null ? fmtT(sp.end) : (aiVideo && aiVideo.duration ? fmtT((aiVideo.offset || 0) + aiVideo.duration) + '(끝)' : '끝')}` + (sp.end != null || (aiVideo && aiVideo.duration) ? ` · ${fmtT((sp.end ?? ((aiVideo.offset || 0) + aiVideo.duration)) - sp.start)} 분석` : ''); }
   $('aiTiles').checked = !!ai.tiles; $('aiAutoPos').checked = !!ai.autoPos;
   const j = aiJob, running = j && (j.status === 'running' || j.status === 'queued');
