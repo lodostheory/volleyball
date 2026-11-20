@@ -70,6 +70,11 @@ input:focus,select:focus{outline:none;border-color:var(--accent)}
 .vid{position:relative;width:100%;aspect-ratio:16/9;background:#000;border-radius:10px;overflow:hidden;margin-top:8px}
 .vid iframe,.vid #yt{position:absolute;inset:0;width:100%;height:100%;border:0}
 .vid .empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);text-align:center;padding:16px;line-height:1.5}
+.tbar{display:flex;align-items:center;gap:8px;margin-top:6px}
+.tbar.hide{display:none}
+.tbar #tSeek{flex:1;min-width:0;height:auto;padding:0;accent-color:var(--accent)}
+.tbar .mono{font-size:12.5px;white-space:nowrap}
+.tbar #tPlay{width:38px;padding:0}
 .opts{display:flex;gap:6px 10px;flex-wrap:wrap;align-items:center;margin-top:8px;font-size:12px;color:var(--muted)}
 .opts select{height:30px;padding:0 6px;font-size:12px}
 .clips{margin-top:10px;border-top:1px dashed var(--line);padding-top:10px}
@@ -307,6 +312,12 @@ details.aibox>summary small{font-weight:600;color:var(--muted);font-size:12px}
       </div>
       <div class="pmain">
     <div class="vid" style="margin-top:0"><div id="yt"></div><div class="empty" id="vEmpty">위 「📹 경기 영상」에 유튜브 주소를 넣고 불러오면 여기서 재생됩니다.<br>영상을 보면서 아래 「동작 기록」에 코드나 패드로 기록하세요</div></div>
+    <div class="tbar hide" id="tBar">
+      <button class="btn sm" id="tPlay" title="재생 / 멈춤">▶</button>
+      <span class="mono" id="tCur">0:00</span>
+      <input type="range" id="tSeek" min="0" max="1000" step="1" value="0" aria-label="남긴 시간대 안에서 재생 위치">
+      <span class="mono muted" id="tSpan"></span>
+    </div>
     <div class="opts">
       <span class="hide" id="vRange" style="color:var(--accent)"></span>
       <span>입력 시각 보정 <select id="oLead"><option value="0">0초</option><option value="1">−1초</option><option value="2">−2초</option><option value="3">−3초</option><option value="5">−5초</option></select></span>
@@ -856,8 +867,10 @@ function ytId(u) {
   return m ? m[1] : /^[\w-]{11}$/.test(u) ? u : null;
 }
 const ytStart = u => { const m = String(u).match(/[?&#](?:t|start)=(\d+)/); return m ? +m[1] : 0; };
-function makePlayer(id, start) {
-  yt = new YT.Player('yt', { videoId: id, playerVars: { playsinline: 1, rel: 0, start, disablekb: 1 }, events: {
+let ytCtl = 1;                                // 지금 플레이어의 유튜브 컨트롤 표시 여부 (잘라 낸 영상이면 0)
+function makePlayer(id, start, ctl) {
+  ytCtl = ctl == null ? (ai.range && ai.range.vid === id && ai.range.lo > 0.5 ? 0 : 1) : ctl;
+  yt = new YT.Player('yt', { videoId: id, playerVars: { playsinline: 1, rel: 0, start, disablekb: 1, controls: ytCtl, fs: ytCtl }, events: {
     onReady: () => { try { yt.setPlaybackRate(+opt.rate); } catch (e) {} vRangeLabel(); const r = playRange(); if (r && (vNow() || 0) < r.lo) seek(r.lo, false); },
     // 영상을 눌러 재생·정지하면 입력창으로 포커스를 돌려 계속 코드를 칠 수 있게 (마우스 환경)
     onStateChange: e => { if (e.data === 1 || e.data === 5) vRangeLabel(); if (FINE && (e.data === 1 || e.data === 2) && sheet.classList.contains('hide')) { const a = document.activeElement; if (!a || a.tagName === 'IFRAME' || a === document.body) codeIn.focus({ preventScroll: true }); } },
@@ -883,15 +896,39 @@ function playRange() {
   if (!r || !id || r.vid !== id) return null;
   let dur = 0; try { dur = ytOk() && yt.getDuration ? yt.getDuration() : 0; } catch (e) {}
   const lo = r.lo > 0.5 ? r.lo : 0, hi = dur && r.hi < dur - 1.5 ? r.hi : Infinity;
-  return lo > 0 || hi < Infinity ? { lo, hi } : null;
+  return lo > 0 || hi < Infinity ? { lo, hi, end: hi < Infinity ? hi : (dur || r.hi) } : null;
 }
 function vRangeLabel() {
   const pr = playRange(); $('vRange').classList.toggle('hide', !pr);
-  if (pr) $('vRange').textContent = `✂ 잘라 낸 부분만 재생 ${fmtT(pr.lo)} ~ ${pr.hi < Infinity ? fmtT(pr.hi) : '끝'}`;
+  if (pr) $('vRange').textContent = `✂ 잘라 낸 부분만 재생 ${fmtT(pr.lo)} ~ ${fmtT(pr.end)}`;
+  $('tBar').classList.toggle('hide', !pr);
+  if (pr) { $('tSpan').textContent = `${fmtT(pr.lo)} ~ ${fmtT(pr.end)}`; tBarTick(); }
+  ytSyncCtl();
+}
+function ytSyncCtl() {                       // 잘라 냄 ↔ 원본이 바뀌면 컨트롤 설정을 바꿔 플레이어를 다시 만듦 (현재 위치 유지)
+  if (!ytOk() || !window.YT) return;
+  const want = playRange() ? 0 : 1, id = ytId(M.video);
+  if (want === ytCtl || !id) return;
+  const t = inRange(vNow() || 0);
+  try { yt.destroy(); } catch (e) {}
+  yt = null;
+  if (!$('yt')) { const d = document.createElement('div'); d.id = 'yt'; document.querySelector('.vid').prepend(d); }
+  makePlayer(id, Math.floor(t || 0), want);
+}
+let tDrag = false, tWant = null;              // tWant: 막대로 옮긴 위치 (멈춘 동안 유튜브가 바로 반영하지 않아 잠시 그 값을 보여 줌)
+function tBarTick() {                         // 남긴 시간대 막대: 현재 위치 · 재생 버튼
+  const r = playRange(); if (!r) return;
+  let t = vNow(), st = -1; try { st = yt.getPlayerState(); } catch (e) {}
+  $('tPlay').textContent = st === 1 || st === 3 ? '❚❚' : '▶';
+  if (tWant) { if (t != null && Math.abs(t - tWant.t) < 1.5) tWant = null; else if (Date.now() - tWant.at < 4000 && st !== 1) t = tWant.t; else tWant = null; }
+  if (t == null) return;
+  $('tCur').textContent = fmtT(Math.min(Math.max(t, r.lo), r.end));
+  if (!tDrag) $('tSeek').value = Math.round(Math.min(1, Math.max(0, (t - r.lo) / Math.max(1, r.end - r.lo))) * 1000);
 }
 const inRange = t => { const r = playRange(); return r && t != null ? Math.min(Math.max(t, r.lo), r.hi) : t; };
 setInterval(() => {
   const r = playRange(); if (!r) return;
+  tBarTick();
   let st; try { st = yt.getPlayerState(); } catch (e) { return; }
   if (st !== 1 && st !== 2 && st !== 3) return;          // 재생 · 멈춤 · 버퍼링 중일 때만
   const t = vNow(); if (t == null) return;
@@ -900,6 +937,18 @@ setInterval(() => {
     else if (t > r.hi + 0.25) { yt.pauseVideo(); yt.seekTo(r.hi, true); }
   } catch (e) {}
 }, 250);
+$('tPlay').onclick = () => { togglePlay(); setTimeout(tBarTick, 150); };
+$('tSeek').oninput = () => {
+  tDrag = true; const r = playRange(); if (!r) return;
+  $('tCur').textContent = fmtT(r.lo + $('tSeek').value / 1000 * (r.end - r.lo));
+};
+$('tSeek').onchange = () => {
+  const r = playRange(); tDrag = false; if (!r || !ytOk()) return;
+  const t = r.lo + $('tSeek').value / 1000 * (r.end - r.lo);
+  tWant = { t, at: Date.now() };
+  try { yt.seekTo(t, true); } catch (e) {}
+  tBarTick();
+};
 function seek(t, play) { t = inRange(t); try { if (ytOk() && t != null) { yt.seekTo(Math.max(0, t), true); if (play) yt.playVideo(); else yt.pauseVideo(); } } catch (e) {} }
 function togglePlay() { try { if (!ytOk()) return; if (yt.getPlayerState() === 1) yt.pauseVideo(); else yt.playVideo(); } catch (e) {} }
 function nudge(d) { const n = vNow(); if (n != null) try { yt.seekTo(Math.max(0, inRange(n + d)), true); } catch (e) {} }
