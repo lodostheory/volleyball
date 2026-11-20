@@ -26,7 +26,7 @@ input:focus,select:focus{outline:none;border-color:var(--accent)}
 @media (min-width:980px){
   /* 보드 열은 좁게(화면 폭의 약 27%), 선수별 기록은 왼쪽 열에서 보드 옆에 보이게 */
   .layout{grid-template-columns:minmax(0,1fr) clamp(300px,27vw,420px);
-    grid-template-areas:"bar side" "video side" "ai side" "player side" "scout side" "rallies side" "stats side" "roster roster";align-items:start}
+    grid-template-areas:"bar side" "video side" "ai side" "player side" "scout side" "rallies side" "stats side" "roster side";align-items:start}
   /* 오른쪽: 점수판을 보드 바로 위에, 둘을 함께 화면에 고정 */
   .side{grid-area:side;display:flex;flex-direction:column;gap:10px;position:sticky;top:10px;max-height:calc(100vh - 20px);overflow-y:auto;scrollbar-width:thin}
   .side .card{padding:10px}
@@ -145,10 +145,12 @@ tr.zero td{color:#5f7f92}
 .sum{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 6px}
 .sum span{background:var(--panel2);border-radius:8px;padding:4px 8px;font-size:12px}
 .sum b{color:var(--accent)}
-.roster{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(250px,1fr))}
+.roster{display:grid;gap:12px;grid-template-columns:1fr 1fr}   /* 두 팀을 항상 나란히 */
+@media (max-width:700px){.roster{gap:8px}.roster .rpos{display:none}.roster table input{height:28px;padding:0 5px}.roster td{padding:2px}.roster .rno{width:46px}.roster h3 small{display:none}}
 .roster>div,.stats>div{min-width:0}
 .roster table input{height:32px;width:100%}
 .roster td{padding:3px}
+.roster .rno{width:70px}
 
 /* AI 영상 인식 */
 details.aibox>summary{cursor:pointer;font-weight:800;font-size:15px}
@@ -1102,8 +1104,8 @@ function renderRoster() {
   $('roster').innerHTML = [0, 1].map(s => {
     const t = s ? M.away : M.home;
     return `<div><h3 style="margin:0 0 6px;font-size:14px"><span class="${s ? 'dotA' : 'dotH'}"></span><span class="rn${s}">${esc(tName(s))}</span> <small class="muted">코드 앞에 ${s ? 'a' : '아무것도 안 붙임'}</small></h3>` +
-      `<table><thead><tr><th>자리</th><th>등번호</th><th class="l">이름</th></tr></thead><tbody>` +
-      t.players.map((p, i) => `<tr><td class="muted">${i + 1}</td><td style="width:70px"><input data-s="${s}" data-p="${i}" data-f="no" maxlength="3" inputmode="numeric" value="${esc(p.no)}"></td>` +
+      `<table><thead><tr><th class="rpos">자리</th><th>등번호</th><th class="l">이름</th></tr></thead><tbody>` +
+      t.players.map((p, i) => `<tr><td class="muted rpos">${i + 1}</td><td class="rno"><input data-s="${s}" data-p="${i}" data-f="no" maxlength="3" inputmode="numeric" value="${esc(p.no)}"></td>` +
         `<td><input data-s="${s}" data-p="${i}" data-f="name" maxlength="12" placeholder="이름" value="${esc(p.name)}"></td></tr>`).join('') + '</tbody></table></div>';
   }).join('');
 }
