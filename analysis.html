@@ -245,8 +245,16 @@ details.aibox>summary small{font-weight:600;color:var(--muted);font-size:12px}
             <span>규격 <select id="aiCourt"><option value="9">9인제 21×10.5m</option><option value="6">6인제 18×9m</option></select></span>
             <span>초당 <select id="aiFps"><option>5</option><option>10</option><option>15</option><option>30</option></select>장</span>
             <span>모델 <select id="aiModel"><option value="n">빠름</option><option value="s">보통</option><option value="m">정확(느림)</option></select></span>
-            <span>구간 <select id="aiRange"><option value="all">영상 전체</option><option value="5">지금부터 5분</option><option value="15">지금부터 15분</option><option value="30">지금부터 30분</option></select></span>
             <label><input type="checkbox" id="aiTiles" style="height:auto"> 먼 공 찾기 강화(느림)</label>
+          </div>
+          <div class="row" style="margin-top:8px">
+            <span class="muted">분석 구간</span>
+            <input id="aiStart" class="mono" style="width:84px" placeholder="0:00" title="분석을 시작할 영상 시각 (예: 1:30, 1:02:15, 90)">
+            <button class="btn sm" id="aiStartNow" title="지금 재생 위치를 시작으로">⏱ 지금</button>
+            <span class="muted">~</span>
+            <input id="aiEnd" class="mono" style="width:84px" placeholder="끝까지" title="분석을 끝낼 영상 시각. 비우면 영상 끝까지">
+            <button class="btn sm" id="aiEndNow" title="지금 재생 위치를 끝으로">⏱ 지금</button>
+            <span class="muted" id="aiSpan"></span>
           </div>
           <div class="row" style="margin-top:8px"><button class="btn primary" id="aiRun">분석 시작</button><button class="btn" id="aiCancel">취소</button><span class="muted" id="aiJob"></span></div>
           <div class="prog hide" id="aiBarBox"><div id="aiBar"></div></div>
@@ -1176,7 +1184,7 @@ const AI_KEY = 'vollyball-mania.analysis.ai';
 const AI_SELF = location.protocol === 'http:' && /^(127\.0\.0\.1|localhost)$/.test(location.hostname) && location.pathname.startsWith('/app/');
 const AI_DEFAULT = AI_SELF ? location.origin : 'http://127.0.0.1:8765';
 const ai = Object.assign({ url: AI_DEFAULT, open: AI_SELF, vid: null, corners: [], frameT: 0, near: 'home', court: '9', fps: 10, model: 's',
-  range: 'all', tiles: false, autoPos: true, job: null, done: {}, map: {} }, lsGet(AI_KEY, {}));
+  start: '', end: '', tiles: false, autoPos: true, job: null, done: {}, map: {} }, lsGet(AI_KEY, {}));
 let aiInfo = null, aiVideo = null, aiJob = null, aiRes = null, aiCur = null, aiImgUrl = null, aiSpan = null, aiPollT = 0, aiVidT = 0, aiCandKey = '';
 const aiSave = () => lsSet(AI_KEY, ai);
 const aiBase = () => (ai.url || AI_DEFAULT).trim().replace(/\/+$/, '');
@@ -1273,12 +1281,28 @@ $('aiFrameBox').addEventListener('click', e => {
 });
 $('aiImg').addEventListener('load', () => renderAI());
 addEventListener('resize', () => { if (aiImgUrl) renderAI(); });
+/* 분석 구간: "1:30", "1:02:15", "90" 같은 시각 글자 → 초. 빈 칸은 null */
+function parseT(s) {
+  s = String(s || '').trim();
+  if (!s) return null;
+  if (!/^\d+(:\d{1,2}){0,2}$/.test(s)) return NaN;
+  return s.split(':').reduce((a, v) => a * 60 + +v, 0);
+}
+function aiSpanOf() {
+  const start = parseT(ai.start), end = parseT(ai.end), dur = aiVideo && aiVideo.duration || null;
+  if (Number.isNaN(start)) return { err: '시작 시각을 1:30 처럼 적어 주세요', field: 'aiStart' };
+  if (Number.isNaN(end)) return { err: '끝 시각을 1:30 처럼 적어 주세요 (비우면 끝까지)', field: 'aiEnd' };
+  const s = start || 0;
+  if (dur && s >= dur) return { err: `시작 시각이 영상 길이(${fmtT(dur)})를 넘습니다`, field: 'aiStart' };
+  if (end != null && end <= s) return { err: '끝 시각은 시작보다 뒤여야 합니다', field: 'aiEnd' };
+  return { start: s, end: end != null && dur ? Math.min(end, dur) : end };
+}
 async function aiRun() {
   if (!aiVideo || aiVideo.status !== 'ready') { toast('먼저 영상을 받으세요'); return; }
   if (ai.corners.length !== 4) { toast('코트 모서리 4개를 찍어 주세요'); return; }
-  const now = Math.max(0, Math.floor(vNow() || 0)), mins = +ai.range;
-  const body = { video: ai.vid, corners: ai.corners, court: ai.court, fps: +ai.fps, model: ai.model, tiles: !!ai.tiles,
-    start: ai.range === 'all' ? 0 : now, end: ai.range === 'all' ? null : now + mins * 60 };
+  const sp = aiSpanOf();
+  if (sp.err) { toast(sp.err); $(sp.field).focus(); return; }
+  const body = { video: ai.vid, corners: ai.corners, court: ai.court, fps: +ai.fps, model: ai.model, tiles: !!ai.tiles, start: sp.start, end: sp.end };
   let r; try { r = await aiApi('POST', '/jobs', body); } catch (e) { r = { ok: false, body: {} }; }
   if (!r.ok) { toast(r.body.error || '분석을 시작하지 못했습니다'); return; }
   aiJob = r.body; ai.job = aiJob.id; ai.done = {}; aiRes = null; aiCur = null; aiSave(); renderAI(); aiWatch();
@@ -1383,7 +1407,8 @@ function renderAI() {
       C.map((p, i) => `<circle cx="${p[0]}" cy="${p[1]}" r="${r}" fill="#ffb020"/><text x="${p[0] + r * 1.4}" y="${p[1] - r * 1.2}" font-size="${r * 3.4}" fill="#ffb020" font-weight="900">${lab[i]}</text>`).join('');
   }
   // 3. 분석
-  for (const [id, k] of [['aiNear', 'near'], ['aiCourt', 'court'], ['aiFps', 'fps'], ['aiModel', 'model'], ['aiRange', 'range']]) if (document.activeElement !== $(id)) $(id).value = String(ai[k]);
+  for (const [id, k] of [['aiNear', 'near'], ['aiCourt', 'court'], ['aiFps', 'fps'], ['aiModel', 'model'], ['aiStart', 'start'], ['aiEnd', 'end']]) if (document.activeElement !== $(id)) $(id).value = String(ai[k] ?? '');
+  { const sp = aiSpanOf(); $('aiSpan').textContent = sp.err ? '⚠ ' + sp.err : `${fmtT(sp.start)} ~ ${sp.end != null ? fmtT(sp.end) : (aiVideo && aiVideo.duration ? fmtT(aiVideo.duration) + '(끝)' : '끝')}` + (sp.end != null || (aiVideo && aiVideo.duration) ? ` · ${fmtT((sp.end ?? aiVideo.duration) - sp.start)} 분석` : ''); }
   $('aiTiles').checked = !!ai.tiles; $('aiAutoPos').checked = !!ai.autoPos;
   const j = aiJob, running = j && (j.status === 'running' || j.status === 'queued');
   $('aiRun').disabled = !ready || ai.corners.length !== 4 || running;
@@ -1423,7 +1448,11 @@ $('aiFrame').onclick = () => aiGetFrame(vNow() || ai.frameT || 0);
 $('aiClear').onclick = () => { ai.corners = []; aiSave(); renderAI(); };
 $('aiRun').onclick = aiRun;
 $('aiCancel').onclick = aiCancel;
-for (const [id, k] of [['aiNear', 'near'], ['aiCourt', 'court'], ['aiFps', 'fps'], ['aiModel', 'model'], ['aiRange', 'range']]) $(id).onchange = () => { ai[k] = $(id).value; aiSave(); aiCandKey = ''; render(); };
+for (const [id, k] of [['aiNear', 'near'], ['aiCourt', 'court'], ['aiFps', 'fps'], ['aiModel', 'model'], ['aiStart', 'start'], ['aiEnd', 'end']]) $(id).onchange = () => { ai[k] = $(id).value.trim(); aiSave(); aiCandKey = ''; render(); };
+for (const [btn, k] of [['aiStartNow', 'start'], ['aiEndNow', 'end']]) $(btn).onclick = () => {
+  const t = vNow(); if (t == null) { toast('먼저 영상을 불러오세요'); return; }
+  ai[k] = fmtT(Math.floor(t)); aiSave(); renderAI();
+};
 $('aiTiles').onchange = () => { ai.tiles = $('aiTiles').checked; aiSave(); };
 $('aiAutoPos').onchange = () => { ai.autoPos = $('aiAutoPos').checked; aiSave(); };
 $('aiReview').onclick = () => aiCur != null ? (ai.done[aiCur] = ai.done[aiCur] || 2, aiSave(), aiNext()) : aiNext();
