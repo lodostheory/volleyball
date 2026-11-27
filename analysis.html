@@ -224,6 +224,8 @@ details.aibox>summary small{font-weight:600;color:var(--muted);font-size:12px}
 .sheet input{width:100%;margin-bottom:8px;height:44px}
 .item{display:block;width:100%;text-align:left;padding:10px 12px;margin-bottom:6px;border-radius:11px;background:var(--panel2);border:1.5px solid var(--line)}
 .item b{display:block;font-size:14px}
+.sheet h3.lh{margin:12px 0 6px;font-size:13px;color:var(--muted)}
+.item.cur{border-color:var(--accent)}
 .mrow{display:flex;gap:6px;align-items:stretch;margin-bottom:6px}.mrow .item{margin:0;flex:1;min-width:0}.mrow .del{flex:none;width:46px;padding:0}
 .toast{position:fixed;left:50%;top:14px;transform:translate(-50%,-20px);opacity:0;pointer-events:none;background:#fff;color:#0b1d2a;
   font-weight:800;font-size:13px;padding:9px 16px;border-radius:999px;transition:all .25s;z-index:9;box-shadow:0 6px 20px #0008;max-width:92vw;text-align:center}
@@ -236,10 +238,14 @@ details.aibox>summary small{font-weight:600;color:var(--muted);font-size:12px}
   <section class="card" style="grid-area:bar">
     <div class="row">
       <input id="mName" class="grow" maxlength="40" placeholder="경기 이름 (비우면 날짜·팀이름으로)">
+      <button class="btn save" id="bLocalSave" title="이 기기(브라우저)의 경기 목록에 저장 · 기록은 입력할 때마다 자동으로도 보관됩니다">💾 저장</button>
       <button class="btn" id="bList">📂 경기 목록</button>
       <button class="btn" id="bNew">＋ 새 경기</button>
-      <button class="btn save" id="bSave">☁ 서버 저장</button>
+      <button class="btn" id="bFileSave" title="경기 전체(명단 · 랠리 · 플래그 · 선수 기록)를 파일(.json)로 내려받기 — 백업 · 다른 기기로 옮기기">⬇ 파일로 저장</button>
+      <button class="btn" id="bFileOpen" title="「파일로 저장」한 .json 파일을 열어 이어서 기록">⬆ 파일 열기</button>
+      <input type="file" id="fileIn" accept=".json,application/json" hidden>
       <button class="btn" id="bCsv" title="모든 동작 기록을 엑셀용 CSV 파일로 받기">⬇ CSV</button>
+      <button class="btn sm" id="bSave" title="(선택) 온라인 서버에도 저장 — 비밀번호 필요">☁ 서버</button>
       <button class="btn danger hide" id="bDel" title="서버에서 삭제">🗑</button>
     </div>
     <div class="muted" id="saveState" style="margin-top:6px"></div>
@@ -520,12 +526,13 @@ const EVS = ['#', '+', '!', '-', '/', '='];
 const NEXT_SK = { S: 'R', R: 'E', E: 'A', A: 'D', B: 'D', D: 'E', F: 'E' };   // 패드: 다음 동작 추천
 const SWAP = { S: 1, A: 1 };                                                    // 패드: 이 동작 뒤에는 상대 팀 차례
 const team = name => ({ name, players: Array.from({ length: 9 }, (_, i) => ({ no: String(i + 1), name: '' })) });
-const blank = () => ({ v: 2, home: team(''), away: team(''), video: '', setPoints: 21, rallies: [] });
+const newId = () => 'm' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+const blank = () => ({ v: 2, id: newId(), home: team(''), away: team(''), video: '', setPoints: 21, rallies: [] });
 const R2EV = { kill: '#', err: '=', blk: '/', cont: '-' };
 function upgrade(m) {            // 예전 형식(공격 화살표 atks)을 동작(acts) 형식으로
   if (!m || typeof m !== 'object' || !Array.isArray(m.rallies)) return blank();
   const fixTeam = t => t && Array.isArray(t.players) && t.players.length === 9 ? t : team(t && t.name || '');
-  return { v: 2, home: fixTeam(m.home), away: fixTeam(m.away), video: m.video || '', setPoints: [15, 21, 25].includes(m.setPoints) ? m.setPoints : 21,
+  return { v: 2, id: typeof m.id === 'string' && /^[\w:-]{1,60}$/.test(m.id) ? m.id : newId(), home: fixTeam(m.home), away: fixTeam(m.away), video: m.video || '', setPoints: [15, 21, 25].includes(m.setPoints) ? m.setPoints : 21,
     rallies: m.rallies.map(r => ({ t: r.t ?? null, pt: r.pt ?? null, pos: r.pos, win: r.win, why: r.why || 'atk', by: r.by ?? null,
       acts: Array.isArray(r.acts) ? r.acts : (r.atks || []).map(a => ({ side: a.side, p: a.p, sk: 'A', ev: R2EV[a.r] || '-', t: r.t ?? null, from: a.from, to: a.to })) })) };
 }
@@ -1278,7 +1285,8 @@ function render() {
   renderStats(W);
   renderClips();
   drawBoard();
-  $('saveState').textContent = (serverName ? `서버: 「${serverName}」` : '서버에 저장 안 됨') + (dirty ? ' · 저장 안 된 변경 있음 (이 기기에는 자동 보관)' : ' · 저장됨');
+  $('saveState').textContent = '💾 이 기기에 자동 보관 중' + (localSavedAt ? ` · 경기 목록 저장 ${new Date(localSavedAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}` : '') +
+    (serverName ? ` · ☁ 서버 「${serverName}」` + (dirty ? ' (서버에는 아직 안 올린 변경 있음)' : '') : '');
   $('bDel').classList.toggle('hide', !serverName);
   renderAI();
   persist();
@@ -1311,10 +1319,7 @@ function buildCsv() {
 }
 $('bCsv').onclick = () => {
   if (!M.rallies.length) { toast('내보낼 기록이 없습니다'); return; }
-  const name = ($('mName').value.trim() || autoName()).replace(/[\\/:*?"<>|]/g, '_');
-  const url = URL.createObjectURL(new Blob([buildCsv()], { type: 'text/csv;charset=utf-8' }));
-  const a = document.createElement('a'); a.href = url; a.download = name + '.csv'; document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 3000);
+  download(fileSafe(matchName()) + '.csv', buildCsv(), 'text/csv;charset=utf-8');
 };
 
 /* ---------- 서버 저장 ---------- */
@@ -1368,41 +1373,122 @@ $('bSave').onclick = async () => {
   serverName = name; dirty = false; render();
   toast(`「${name}」 서버에 저장했습니다`);
 };
+/* ---------- 이 기기의 경기 목록 (서버 없이) ----------
+   경기마다 localStorage 에 따로 보관하고(열쇠 = 경기 id), 목록(이름 · 팀 · 랠리 수 · 시각)은 따로 둔다.
+   다른 경기로 바꾸거나(목록 · 새 경기 · 파일 열기) 목록을 열 때 지금 경기를 먼저 보관하므로 기록이 사라지지 않는다 */
+const LIST_KEY = 'vollyball-mania.analysis.list', MKEY = id => 'vollyball-mania.analysis.m.' + id;
+const localList = () => { const l = lsGet(LIST_KEY, []); return Array.isArray(l) ? l.filter(x => x && x.id) : []; };
+const matchName = () => $('mName').value.trim().replace(/\s+/g, ' ') || autoName();
+let localSavedAt = 0;
+function stashCurrent() {                    // 지금 경기를 이 기기 목록에 보관 (빈 경기는 건너뜀)
+  if (!M.rallies.length && !$('mName').value.trim()) return true;
+  const name = matchName(), now = Date.now();
+  try { localStorage.setItem(MKEY(M.id), JSON.stringify({ name, M, base: BASE_POS === DEFAULT_POS ? null : BASE_POS, savedAt: now })); }
+  catch (e) { toast('브라우저 저장 공간이 가득 찼습니다 · 안 쓰는 경기를 목록에서 지우거나 「파일로 저장」하세요'); return false; }
+  const l = localList().filter(x => x.id !== M.id);
+  l.push({ id: M.id, name, home: tName(0), away: tName(1), n: M.rallies.length, updatedAt: now });
+  lsSet(LIST_KEY, l); localSavedAt = now; return true;
+}
+function useMatch(m, name, base) {           // 다른 경기로 바꿔 화면에 띄움
+  M = upgrade(m); $('mName').value = name || '';
+  const baseLoaded = validPos(base);
+  if (baseLoaded) { BASE_POS = base; try { localStorage.setItem(BASE_KEY, JSON.stringify(base)); } catch (e) {} }
+  resetView(); closeSheet(); renderRoster(); render();
+  $('vUrl').value = M.video || ''; if (M.video) loadVideo(M.video, true);
+  return baseLoaded;
+}
+function openLocal(id) {
+  if (id === M.id) { closeSheet(); return; }
+  const d = lsGet(MKEY(id), null);
+  if (!d || !d.M) { toast('이 기기에서 기록을 찾을 수 없습니다'); return; }
+  if (!stashCurrent()) return;
+  serverName = ''; dirty = false; localSavedAt = d.savedAt || 0;
+  const bl = useMatch({ ...d.M, id }, d.name, d.base);
+  toast(`「${d.name}」 불러왔습니다` + (bl ? ' · 기본 위치도 적용' : ''));
+}
+function delLocal(id, name) {
+  if (!confirm(`「${name}」 기록을 이 기기에서 지울까요? 되돌릴 수 없습니다.\n(파일로 저장해 둔 것이 있으면 「파일 열기」로 되살릴 수 있습니다)`)) return;
+  try { localStorage.removeItem(MKEY(id)); } catch (e) {}
+  lsSet(LIST_KEY, localList().filter(x => x.id !== id));
+  toast(`「${name}」 지웠습니다`); openList();
+}
+function download(name, text, type) {
+  const url = URL.createObjectURL(new Blob([text], { type }));
+  const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 3000);
+}
+const fileSafe = n => n.replace(/[\\/:*?"<>|]/g, '_');
+$('bLocalSave').onclick = () => { if (!M.rallies.length && !$('mName').value.trim()) $('mName').value = autoName(); if (stashCurrent()) { render(); toast(`「${matchName()}」 이 기기에 저장했습니다 · 📂 경기 목록에서 다시 열 수 있습니다`); } };
+$('bFileSave').onclick = () => {
+  stashCurrent();
+  const name = matchName();
+  download(fileSafe(name) + '.json', JSON.stringify({ app: 'volleyball-analysis', v: 1, name, savedAt: new Date().toISOString(), match: M, base: BASE_POS === DEFAULT_POS ? null : BASE_POS }), 'application/json');
+  toast(`「${name}.json」 파일로 저장했습니다 · 「⬆ 파일 열기」로 다시 열 수 있습니다`);
+};
+$('bFileOpen').onclick = () => { $('fileIn').value = ''; $('fileIn').click(); };
+$('fileIn').onchange = async () => {
+  const f = $('fileIn').files[0]; if (!f) return;
+  let d; try { d = JSON.parse(await f.text()); } catch (e) { toast('파일을 읽을 수 없습니다 (「파일로 저장」한 .json 파일인지 확인하세요)'); return; }
+  const m = d && d.match ? d.match : d;
+  const okPos = q => Array.isArray(q) && q.length === 2 && q.every(Number.isFinite);
+  if (!m || !Array.isArray(m.rallies) || !m.home || !m.away) { toast('경기 기록 파일이 아닙니다'); return; }
+  m.rallies = m.rallies.filter(r => r && Array.isArray(r.pos) && r.pos.length === 18 && r.pos.every(okPos) && (r.win === 0 || r.win === 1))
+    .map(r => ({ ...r, acts: Array.isArray(r.acts) ? r.acts.filter(a => a && (a.side === 0 || a.side === 1) && Number.isInteger(a.p) && a.p >= 0 && a.p <= 8 && SKN[a.sk]) : r.acts }));
+  if (!stashCurrent()) return;
+  const name = (d.name || f.name.replace(/\.json$/i, '')).slice(0, 40);
+  if (typeof m.id === 'string' && lsGet(MKEY(m.id), null)) m.id = newId();   // 이 기기에 같은 경기가 있으면 덮어쓰지 않고 새로
+  serverName = ''; dirty = false;
+  const bl = useMatch(m, name, d.base);
+  stashCurrent(); render();
+  toast(`「${name}」 파일을 열었습니다 · 랠리 ${M.rallies.length}개` + (bl ? ' · 기본 위치도 적용' : ''));
+};
 const goneM = new Set();   // 방금 지운 경기 (서버 목록은 반영까지 최대 1분 걸려 그동안 숨김)
 async function openList() {
-  openSheet(h('h2', { textContent: '서버의 경기 목록' }), h('p', { textContent: '불러오는 중…' }));
+  stashCurrent();
+  const kids = [h('h2', { textContent: '📂 경기 목록' }), h('h3', { className: 'lh', textContent: '💾 이 기기에 저장된 경기' })];
+  const local = localList().sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  if (!local.length) kids.push(h('p', { textContent: '아직 없습니다. 기록을 시작하면 자동으로 여기에 보관됩니다.' }));
+  for (const m of local) {
+    const cur = m.id === M.id, it = h('button', { className: 'item' + (cur ? ' cur' : ''), onclick: () => openLocal(m.id) });
+    it.append(h('b', { textContent: m.name + (cur ? ' · 지금 열림' : '') }), h('span', { className: 'muted', textContent: `${m.home} vs ${m.away} · 랠리 ${m.n || 0}개 · ${m.updatedAt ? new Date(m.updatedAt).toLocaleString('ko-KR') : ''}` }));
+    const row = h('div', { className: 'mrow' }, it);
+    if (!cur) row.append(h('button', { className: 'btn danger del', textContent: '🗑', title: '이 기기에서 삭제', onclick: () => delLocal(m.id, m.name) }));
+    kids.push(row);
+  }
+  const srv = h('div', {}, h('p', { textContent: '불러오는 중…' }));
+  kids.push(h('h3', { className: 'lh', textContent: '☁ 서버에 저장된 경기 (선택)' }), srv, h('button', { className: 'btn', textContent: '닫기', onclick: closeSheet }));
+  openSheet(...kids);
   let r; try { r = await api('GET', '/matches'); } catch (e) { r = { ok: false }; }
-  if (sheet.classList.contains('hide')) return;
-  const kids = [h('h2', { textContent: '서버의 경기 목록' })];
-  if (!r.ok) kids.push(h('p', { textContent: '서버에 연결할 수 없어 목록을 불러오지 못했습니다.' }));
-  else if (r.body.matches = (r.body.matches || []).filter(m => !goneM.has(m.name)), !r.body.matches.length) kids.push(h('p', { textContent: '저장된 경기가 없습니다.' }));
+  if (sheet.classList.contains('hide') || !box.contains(srv)) return;
+  const sk = [];
+  if (!r.ok) sk.push(h('p', { textContent: '서버에 연결할 수 없습니다. (이 기기 목록은 서버 없이 그대로 쓸 수 있습니다)' }));
+  else if (r.body.matches = (r.body.matches || []).filter(m => !goneM.has(m.name)), !r.body.matches.length) sk.push(h('p', { textContent: '서버에 저장된 경기가 없습니다.' }));
   else for (const m of r.body.matches) {
     const it = h('button', { className: 'item', onclick: () => loadMatch(m.name) });
     it.append(h('b', { textContent: m.name }), h('span', { className: 'muted', textContent: `${m.home || '우리 팀'} vs ${m.away || '상대 팀'} · 세트 ${m.score || '0-0'} · ${m.updatedAt ? new Date(m.updatedAt).toLocaleString('ko-KR') : ''}` }));
     const del = h('button', { className: 'btn danger del', textContent: '🗑', title: '서버에서 삭제', onclick: () => delMatch(m.name, true) });
-    kids.push(h('div', { className: 'mrow' }, it, del));
+    sk.push(h('div', { className: 'mrow' }, it, del));
   }
-  kids.push(h('button', { className: 'btn', textContent: '닫기', onclick: closeSheet }));
-  openSheet(...kids);
+  srv.replaceChildren(...sk);
 }
 $('bList').onclick = openList;
 function resetView() { draft = newDraft(); sel = null; pend = null; undo = []; flt = null; overlay = false; stopClips(); aiCur = null; Object.assign(pad, { side: 0, p: null, sk: 'S' }); msg = null; }
 async function loadMatch(name) {
-  if (dirty && M.rallies.length && !confirm('저장하지 않은 기록이 있습니다. 버리고 불러올까요?')) return;
   let r; try { r = await api('GET', '/matches/' + encodeURIComponent(name)); } catch (e) { r = { ok: false }; }
   if (!r.ok) { toast('경기를 불러오지 못했습니다'); return; }
-  M = upgrade(r.body.data); serverName = r.body.name; dirty = false; $('mName').value = serverName;
-  const sb = r.body.data && r.body.data.base, baseLoaded = validPos(sb);   // 경기에 저장된 기본 위치가 있으면 이 기기의 기본 위치로
-  if (baseLoaded) { BASE_POS = sb; try { localStorage.setItem(BASE_KEY, JSON.stringify(sb)); } catch (e) {} }
-  resetView(); closeSheet(); renderRoster(); render();
-  $('vUrl').value = M.video || ''; if (M.video) loadVideo(M.video, true);
-  toast(`「${serverName}」 불러왔습니다` + (baseLoaded ? ' · 기본 위치도 적용' : ''));
+  if (!stashCurrent()) return;                 // 지금 경기는 이 기기 목록에 보관
+  serverName = r.body.name; dirty = false;
+  const baseLoaded = useMatch({ ...r.body.data, id: 'srv:' + [...serverName].map(c => c.charCodeAt(0).toString(36)).join('').slice(0, 50) }, serverName, r.body.data && r.body.data.base);
+  stashCurrent(); render();
+  toast(`「${serverName}」 불러왔습니다 · 이 기기 목록에도 보관` + (baseLoaded ? ' · 기본 위치도 적용' : ''));
 }
 $('bNew').onclick = () => {
-  if (dirty && M.rallies.length && !confirm('저장하지 않은 기록이 있습니다. 새 경기를 시작할까요? (팀 이름과 명단은 그대로 둡니다)')) return;
+  if (!stashCurrent()) return;                 // 지금 경기는 이 기기 목록에 보관 (사라지지 않음)
+  const had = M.rallies.length || $('mName').value.trim();
   M = { ...blank(), home: M.home, away: M.away, setPoints: M.setPoints };
-  serverName = ''; dirty = false; $('mName').value = ''; $('vUrl').value = '';
+  serverName = ''; dirty = false; localSavedAt = 0; $('mName').value = ''; $('vUrl').value = '';
   resetView(); render();
+  toast(had ? '새 경기 · 이전 경기는 「📂 경기 목록」에 보관했습니다 (팀 이름 · 명단은 그대로)' : '새 경기 (팀 이름 · 명단은 그대로)');
 };
 $('bDel').onclick = () => { if (serverName) delMatch(serverName, false); };
 async function delMatch(name, fromList) {          // 서버의 경기 기록 삭제 (목록에서 또는 지금 경기)
