@@ -1,0 +1,7 @@
+# 설치·실행하면 생기는 큰 파일들은 저장소에 올리지 않는다
+.venv/
+data/
+models/*.pt
+videos/*
+!videos/README.txt
+__pycache__/
