@@ -81,8 +81,8 @@ function cleanMatch(d) {
       }
     } else return null;
     rallies.push({
-      t, pos: r.pos, acts, win: r.win,
-      why: ['atk', 'blk', 'srv', 'err'].includes(r.why) ? r.why : 'atk',
+      t, pt: num(r.pt, 0, 1e6) ? r.pt : null, pos: r.pos, acts, win: r.win,   // pt: 득점 순간(영상 시각)
+      why: ['atk', 'blk', 'srv', 'err', 'flag'].includes(r.why) ? r.why : 'atk',   // flag: 득점 플래그만 찍고 선수 기록 전
       by: idx(r.by) ? r.by : null,
     });
   }

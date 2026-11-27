@@ -79,7 +79,21 @@ input:focus,select:focus{outline:none;border-color:var(--accent)}
 .vid .empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);text-align:center;padding:16px;line-height:1.5}
 .tbar{display:flex;align-items:center;gap:8px;margin-top:6px}
 .tbar.hide{display:none}
+.tbar{padding-top:14px}
+.ttrack{position:relative;flex:1;min-width:0;display:flex;align-items:center}
 .tbar #tSeek{flex:1;min-width:0;height:auto;padding:0;accent-color:var(--accent)}
+.tmarks{position:absolute;left:8px;right:8px;top:-15px;height:16px;pointer-events:none}
+.tmarks .fm{position:absolute;top:0;width:14px;height:16px;margin-left:-2px;padding:0;border:0;background:none;pointer-events:auto;cursor:pointer}
+.tmarks .fm::before{content:'';position:absolute;left:1px;top:0;width:2px;height:16px;background:currentColor}
+.tmarks .fm::after{content:'';position:absolute;left:3px;top:0;width:9px;height:7px;background:currentColor;clip-path:polygon(0 0,100% 50%,0 100%)}
+.tmarks .fm.h{color:var(--home)} .tmarks .fm.a{color:var(--away)}
+.tmarks .fm.todo::after{background:none;border:1.5px solid currentColor;clip-path:none;width:7px;height:5px}
+.tmarks .fm.on{transform:scale(1.35);transform-origin:bottom left;z-index:2}
+.flagrow{display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center;margin-top:8px}
+.flagrow .fl{height:36px;font-size:13.5px}
+.flagrow .fl.home{background:#0f3a4d;border-color:var(--home)}
+.flagrow .fl.away{background:#4a1f25;border-color:var(--away)}
+.rtodo{color:var(--accent);font-weight:700}
 .tbar .mono{font-size:12.5px;white-space:nowrap}
 .tbar #tPlay{width:38px;padding:0}
 .opts{display:flex;gap:6px 10px;flex-wrap:wrap;align-items:center;margin-top:8px;font-size:12px;color:var(--muted)}
@@ -241,20 +255,20 @@ details.aibox>summary small{font-weight:600;color:var(--muted);font-size:12px}
 
   <section class="card" style="grid-area:ai">
     <details class="aibox" id="aiBox">
-      <summary>🤖 AI 영상 인식 <small>PC 에서 분석 서버를 켜면 영상 속 터치 장면과 선수 위치를 자동으로 찾아 줍니다</small></summary>
+      <summary>💾 영상 받기 · 자르기 <small>PC 에서 서버(run_server.bat)를 켜면 유튜브 영상을 받아 필요 없는 앞뒤를 잘라 낼 수 있습니다</small></summary>
       <div class="row" style="margin-top:8px">
         <input id="aiUrl" class="grow mono" placeholder="http://127.0.0.1:8765">
         <button class="btn" id="aiPing">연결 확인</button>
         <span class="muted" id="aiState"></span>
       </div>
-      <div class="muted" id="aiHelp" style="margin-top:6px;line-height:1.55">이 기능은 PC 에서만 됩니다. 저장소의 <span class="mono">analyzer\run_server.bat</span> 를 실행하면(처음 한 번은 설치에 몇 분) 서버가 켜집니다. 자세한 방법은 <a href="https://github.com/lodostheory/volleyball/tree/main/analyzer" target="_blank" rel="noopener" style="color:var(--accent)">analyzer 안내</a>. 본인 또는 권한이 있는 영상만 분석하세요.</div>
+      <div class="muted" id="aiHelp" style="margin-top:6px;line-height:1.55">이 기능은 PC 에서만 됩니다. 저장소의 <span class="mono">analyzer\run_server.bat</span> 를 실행하면(처음 한 번은 설치에 몇 분) 서버가 켜집니다. 자세한 방법은 <a href="https://github.com/lodostheory/volleyball/tree/main/analyzer" target="_blank" rel="noopener" style="color:var(--accent)">analyzer 안내</a>. 본인 또는 권한이 있는 영상만 받으세요.</div>
       <div class="row hide" id="aiLocalRow" style="margin-top:8px">
         <a class="btn primary" id="aiOpenLocal" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;text-decoration:none">🖥 PC 서버 주소에서 분석 화면 열기</a>
         <span class="muted" style="flex:1 1 220px">서버가 켜져 있는데도 연결이 안 되면, 브라우저가 이 공개 사이트의 PC 접근을 막은 것입니다. 이 버튼으로 열면(화면과 서버가 같은 주소) 권한 없이 바로 연결됩니다. 기록은 서버에 저장해 두면 양쪽에서 불러올 수 있습니다.</span>
       </div>
       <div id="aiSteps" class="hide">
         <div class="aistep">
-          <h4>1. 영상 받기</h4>
+          <h4>영상 받기</h4>
           <div class="row"><button class="btn" id="aiFetch">위에서 불러온 유튜브 영상 받기</button><span class="muted" id="aiVid"></span></div>
           <div class="prog hide" id="aiVidBarBox"><div id="aiVidBar"></div></div>
           <div class="hide" id="aiTrimBox" style="margin-top:8px">
@@ -271,13 +285,13 @@ details.aibox>summary small{font-weight:600;color:var(--muted);font-size:12px}
             <div class="muted" id="aiTrimInfo" style="margin-top:4px"></div>
           </div>
         </div>
-        <div class="aistep" id="aiStep2">
+        <div class="aistep" id="aiStep2" hidden>
           <h4>2. 코트 모서리 찍기</h4>
           <div class="row"><button class="btn sm" id="aiFrame">지금 영상 시각의 화면 가져오기</button><button class="btn sm" id="aiClear">다시 찍기</button><button class="btn sm hide" id="aiShowFrame">🖼 화면 보기</button><span class="muted" id="aiCornerState"></span></div>
           <div class="muted" style="margin-top:4px;line-height:1.55">코트 <b>바닥 선의 네 모서리</b>를 ① 먼 쪽 왼쪽 → ② 먼 쪽 오른쪽 → ③ 가까운 쪽 오른쪽 → ④ 가까운 쪽 왼쪽 순서로 누르세요. 모서리가 화면 밖이면 둘레의 빗금 여백에 짐작해서 찍으면 됩니다. 4개를 찍으면 계산된 <b style="color:#ff6b6b">네트 위치(빨간 선)</b>가 그려지니, 실제 네트 바로 아래 바닥과 겹치는지 확인하세요. 카메라는 엔드라인 뒤 높은 곳에 고정된 영상이 가장 정확합니다.</div>
           <div class="aiframe hide" id="aiFrameBox"><img id="aiImg" alt="코트 화면"><svg id="aiPoly" preserveAspectRatio="none"></svg></div>
         </div>
-        <div class="aistep">
+        <div class="aistep" id="aiStep3" hidden>
           <h4>3. 분석</h4>
           <div class="opts" style="margin-top:0">
             <span>우리 팀 <select id="aiNear"><option value="home">가까운 쪽(화면 아래)</option><option value="away">먼 쪽(화면 위)</option></select></span>
@@ -319,10 +333,16 @@ details.aibox>summary small{font-weight:600;color:var(--muted);font-size:12px}
       </div>
       <div class="pmain">
     <div class="vid" style="margin-top:0"><div id="yt"></div><div class="empty" id="vEmpty">위 「📹 경기 영상」에 유튜브 주소를 넣고 불러오면 여기서 재생됩니다.<br>영상을 보면서 아래 「동작 기록」에 코드나 패드로 기록하세요</div></div>
+    <div class="flagrow hide" id="flagRow">
+      <button class="btn fl home" id="fHome" title="지금 장면에 득점 플래그 (Alt+1)"></button>
+      <button class="btn fl away" id="fAway" title="지금 장면에 득점 플래그 (Alt+2)"></button>
+      <span class="muted" id="flagInfo"></span>
+      <button class="btn sm hide" id="fNext" title="선수 기록을 아직 안 한 플래그 랠리를 열고 그 장면으로 이동">✍ 기록 안 한 플래그 열기</button>
+    </div>
     <div class="tbar hide" id="tBar">
       <button class="btn sm" id="tPlay" title="재생 / 멈춤">▶</button>
       <span class="mono" id="tCur">0:00</span>
-      <input type="range" id="tSeek" min="0" max="1000" step="1" value="0" aria-label="남긴 시간대 안에서 재생 위치">
+      <div class="ttrack"><input type="range" id="tSeek" min="0" max="1000" step="1" value="0" aria-label="재생 위치 (잘라 낸 영상이면 남긴 시간대 안)"><div class="tmarks" id="tMarks"></div></div>
       <span class="mono muted" id="tSpan"></span>
     </div>
     <div class="opts">
@@ -370,6 +390,7 @@ details.aibox>summary small{font-weight:600;color:var(--muted);font-size:12px}
       </div>
       <div class="muted" style="margin-top:6px">코드로 득점이 정해지지 않는 경우(네트 터치 등)에만 누르면 됩니다 · 코드 <span class="mono">p</span> / <span class="mono">ap</span> 와 같음</div>
       <div class="row hide" id="editRow" style="margin-top:8px">
+        <span class="muted" id="editInfo" style="flex-basis:100%"></span>
         <button class="btn danger" id="bDelRally">이 랠리 삭제</button>
         <button class="btn" id="bCancelEdit">편집 취소</button>
       </div>
@@ -446,8 +467,8 @@ details.aibox>summary small{font-weight:600;color:var(--muted);font-size:12px}
 
   <section class="card" style="grid-area:rallies">
     <h2>📋 랠리 기록 <small id="rCount"></small></h2>
-    <div class="row"><button class="btn sm" id="bUndo">마지막 랠리 지우기</button><span class="muted">줄을 누르면 그 랠리를 보드에 띄우고 영상도 그 시각으로 이동</span></div>
-    <div class="list tall"><table><thead><tr><th>#</th><th>세트</th><th>점수</th><th class="l">득점</th><th class="l">방법</th><th class="l">코드</th><th>영상</th></tr></thead><tbody id="rBody"></tbody></table></div>
+    <div class="row"><button class="btn sm" id="bUndo">마지막 랠리 지우기</button><span class="muted">줄을 누르면 그 랠리를 열어 선수 기록을 넣거나 고칠 수 있고 영상도 랠리 시작으로 이동 · 🚩 시각을 누르면 득점 장면만 재생</span></div>
+    <div class="list tall"><table><thead><tr><th>#</th><th>세트</th><th>점수</th><th class="l">득점</th><th class="l">방법</th><th class="l">코드</th><th title="득점이 난 순간 · 누르면 그 장면 재생">🚩 득점</th><th title="랠리 시작 시각">시작</th></tr></thead><tbody id="rBody"></tbody></table></div>
   </section>
 
   <section class="card" style="grid-area:stats">
@@ -488,7 +509,7 @@ const DEFAULT_POS = [...GRID.map(([x, y]) => [x, 100 + y]), ...GRID.map(([x, y])
 const BASE_KEY = 'vollyball-mania.analysis.base';
 const validPos = p => Array.isArray(p) && p.length === 18 && p.every(q => Array.isArray(q) && q.length === 2 && q.every(v => typeof v === 'number' && isFinite(v)));
 let BASE_POS = (() => { try { const p = JSON.parse(localStorage.getItem(BASE_KEY)); return validPos(p) ? p : DEFAULT_POS; } catch (e) { return DEFAULT_POS; } })();
-const WHY = { atk: '공격', blk: '블로킹', srv: '서브', err: '상대 범실' };
+const WHY = { atk: '공격', blk: '블로킹', srv: '서브', err: '상대 범실', flag: '미기록' };   // flag: 득점 플래그만 찍고 선수 기록 전
 const SKN = { S: '서브', R: '리시브', E: '토스', A: '공격', B: '블로킹', D: '디그', F: '프리볼' };
 const EVN = { '#': '완벽·득점', '+': '좋음', '!': '보통', '-': '나쁨', '/': '차단·넘어감', '=': '범실' };
 const EVX = { S: { '#': '에이스', '+': '상대 리시브 흔들림', '-': '상대 리시브 완벽', '/': '상대 리시브 넘어옴' },
@@ -505,7 +526,7 @@ function upgrade(m) {            // 예전 형식(공격 화살표 atks)을 동�
   if (!m || typeof m !== 'object' || !Array.isArray(m.rallies)) return blank();
   const fixTeam = t => t && Array.isArray(t.players) && t.players.length === 9 ? t : team(t && t.name || '');
   return { v: 2, home: fixTeam(m.home), away: fixTeam(m.away), video: m.video || '', setPoints: [15, 21, 25].includes(m.setPoints) ? m.setPoints : 21,
-    rallies: m.rallies.map(r => ({ t: r.t ?? null, pos: r.pos, win: r.win, why: r.why || 'atk', by: r.by ?? null,
+    rallies: m.rallies.map(r => ({ t: r.t ?? null, pt: r.pt ?? null, pos: r.pos, win: r.win, why: r.why || 'atk', by: r.by ?? null,
       acts: Array.isArray(r.acts) ? r.acts : (r.atks || []).map(a => ({ side: a.side, p: a.p, sk: 'A', ev: R2EV[a.r] || '-', t: r.t ?? null, from: a.from, to: a.to })) })) };
 }
 
@@ -661,7 +682,11 @@ function commitRally(win, why, by) {
   let t = draft.t;
   if (t == null && first) t = Math.max(0, Math.round(first.t - 3));
   if (t == null) { const n = vNow(); if (n != null) t = Math.max(0, Math.round(n - 8)); }
-  const r = { t, pos: clone(draft.pos), acts: draft.acts, win, why, by };   // acts 는 그대로 옮긴다(방향 입력 대기 중인 동작을 이어서 고칠 수 있게)
+  let pt = draft.pt;                           // 득점 순간: 플래그 시각 → 득점 동작 시각 → 지금 영상 시각
+  if (pt == null) { const k = [...draft.acts].reverse().find(a => a.t != null && pointOf(a) === win); if (k) pt = k.t; }
+  if (pt == null && draft.edit == null) pt = vNowT();   // 예전 랠리를 고칠 때는 지금 재생 위치로 짐작하지 않음
+  if (pt != null && t != null && t > pt) t = Math.max(0, Math.round(pt - 8));
+  const r = { t, pt: pt ?? null, pos: clone(draft.pos), acts: draft.acts, win, why, by };   // acts 는 그대로 옮긴다(방향 입력 대기 중인 동작을 이어서 고칠 수 있게)
   if (draft.edit != null) { M.rallies[draft.edit] = r; draft = newDraft(); toast('랠리를 수정했습니다'); }
   else {
     M.rallies.push(r); draft = newDraft(r.pos);
@@ -679,6 +704,21 @@ function manualPoint(win) {
   }
   pushUndo();
   if (!commitRally(win, draft.why, draft.why === 'err' ? null : by)) undo.pop();
+}
+function flagPoint(win) {                     // 🚩 지금 장면에 득점 플래그: 그 팀 득점으로 랠리를 끝내고 득점 순간을 남김 (선수 기록은 나중에)
+  if (draft.edit != null) { toast('랠리를 편집 중입니다 · 먼저 「득점 (수정 저장)」이나 「편집 취소」를 누르세요'); return; }
+  const n = vNowT(); if (n == null) { toast('먼저 영상을 불러오세요'); return; }
+  draft.pt = n;
+  if (!draft.acts.length) { draft.why = 'flag'; draft.by = ''; }
+  const before = M.rallies.length;
+  manualPoint(win);
+  if (M.rallies.length > before) toast(`🚩 ${tName(win)} 득점 플래그 · ${fmtT(n)}` + (M.rallies[M.rallies.length - 1].acts.length ? '' : ' · 선수 기록은 플래그를 눌러 나중에'));
+  else delete draft.pt;
+}
+function nextTodo() {                         // 선수 기록을 안 한 플래그 랠리 (지금 편집 중인 것 다음부터)
+  const from = draft.edit != null ? draft.edit + 1 : 0, n = M.rallies.length;
+  for (let k = 0; k < n; k++) { const i = (from + k) % n, r = M.rallies[i]; if (r.why === 'flag' && !r.acts.length) return i; }
+  return -1;
 }
 function padAfter(a) { pad.side = SWAP[a.sk] ? 1 - a.side : a.side; pad.p = null; pad.sk = NEXT_SK[a.sk] || null; }
 
@@ -905,12 +945,27 @@ function playRange() {
   const lo = r.lo > 0.5 ? r.lo : 0, hi = dur && r.hi < dur - 1.5 ? r.hi : Infinity;
   return lo > 0 || hi < Infinity ? { lo, hi, end: hi < Infinity ? hi : (dur || r.hi) } : null;
 }
+function viewRange() {                       // 재생 막대 범위: 잘라 낸 영상이면 남긴 부분, 아니면 영상 전체
+  const r = playRange(); if (r) return r;
+  if (!ytId(M.video)) return null;
+  let dur = 0; try { dur = ytOk() && yt.getDuration ? yt.getDuration() : 0; } catch (e) {}
+  return dur > 0 ? { lo: 0, hi: Infinity, end: dur } : null;
+}
 function vRangeLabel() {
   const pr = playRange(); $('vRange').classList.toggle('hide', !pr);
   if (pr) $('vRange').textContent = `✂ 잘라 낸 부분만 재생 ${fmtT(pr.lo)} ~ ${fmtT(pr.end)}`;
-  $('tBar').classList.toggle('hide', !pr);
-  if (pr) { $('tSpan').textContent = `${fmtT(pr.lo)} ~ ${fmtT(pr.end)}`; tBarTick(); }
+  const vr = viewRange();
+  $('tBar').classList.toggle('hide', !vr);
+  if (vr) { $('tSpan').textContent = `${fmtT(vr.lo)} ~ ${fmtT(vr.end)}`; tBarTick(); }
+  drawFlags();
   ytSyncCtl();
+}
+function drawFlags() {                         // 재생 막대 위 득점 플래그 (우리 팀 파랑 · 상대 빨강, 속이 빈 깃발 = 선수 기록 전)
+  const r = viewRange(), el = $('tMarks');
+  if (!r) { el.innerHTML = ''; return; }
+  const span = Math.max(1, r.end - r.lo);
+  el.innerHTML = M.rallies.map((x, i) => x.pt == null || x.pt < r.lo - 1 || x.pt > r.end + 1 ? '' :
+    `<button class="fm ${x.win ? 'a' : 'h'}${x.acts.length ? '' : ' todo'}${draft.edit === i ? ' on' : ''}" data-r="${i}" style="left:${(Math.min(1, Math.max(0, (x.pt - r.lo) / span)) * 100).toFixed(2)}%" title="#${i + 1} ${esc(tName(x.win))} 득점 · ${fmtT(x.pt)}${x.acts.length ? '' : ' · 선수 기록 전'} — 누르면 이 랠리 기록 열기"></button>`).join('');
 }
 function ytSyncCtl() {                       // 잘라 냄 ↔ 원본이 바뀌면 컨트롤 설정을 바꿔 플레이어를 다시 만듦 (현재 위치 유지)
   if (!ytOk() || !window.YT) return;
@@ -923,8 +978,8 @@ function ytSyncCtl() {                       // 잘라 냄 ↔ 원본이 바뀌�
   makePlayer(id, Math.floor(t || 0), want);
 }
 let tDrag = false, tWant = null;              // tWant: 막대로 옮긴 위치 (멈춘 동안 유튜브가 바로 반영하지 않아 잠시 그 값을 보여 줌)
-function tBarTick() {                         // 남긴 시간대 막대: 현재 위치 · 재생 버튼
-  const r = playRange(); if (!r) return;
+function tBarTick() {                         // 재생 막대: 현재 위치 · 재생 버튼
+  const r = viewRange(); if (!r) return;
   let t = vNow(), st = -1; try { st = yt.getPlayerState(); } catch (e) {}
   $('tPlay').textContent = st === 1 || st === 3 ? '❚❚' : '▶';
   if (tWant) { if (t != null && Math.abs(t - tWant.t) < 1.5) tWant = null; else if (Date.now() - tWant.at < 4000 && st !== 1) t = tWant.t; else tWant = null; }
@@ -934,8 +989,9 @@ function tBarTick() {                         // 남긴 시간대 막대: 현재
 }
 const inRange = t => { const r = playRange(); return r && t != null ? Math.min(Math.max(t, r.lo), r.hi) : t; };
 setInterval(() => {
-  const r = playRange(); if (!r) return;
+  if ($('tBar').classList.contains('hide') === !!viewRange()) vRangeLabel();   // 영상 길이를 알게 되면 막대 표시
   tBarTick();
+  const r = playRange(); if (!r) return;
   let st; try { st = yt.getPlayerState(); } catch (e) { return; }
   if (st !== 1 && st !== 2 && st !== 3) return;          // 재생 · 멈춤 · 버퍼링 중일 때만
   const t = vNow(); if (t == null) return;
@@ -945,12 +1001,13 @@ setInterval(() => {
   } catch (e) {}
 }, 250);
 $('tPlay').onclick = () => { togglePlay(); setTimeout(tBarTick, 150); };
+$('tMarks').addEventListener('click', e => { const b = e.target.closest('[data-r]'); if (b) openRally(+b.dataset.r); });
 $('tSeek').oninput = () => {
-  tDrag = true; const r = playRange(); if (!r) return;
+  tDrag = true; const r = viewRange(); if (!r) return;
   $('tCur').textContent = fmtT(r.lo + $('tSeek').value / 1000 * (r.end - r.lo));
 };
 $('tSeek').onchange = () => {
-  const r = playRange(); tDrag = false; if (!r || !ytOk()) return;
+  const r = viewRange(); tDrag = false; if (!r || !ytOk()) return;
   const t = r.lo + $('tSeek').value / 1000 * (r.end - r.lo);
   tWant = { t, at: Date.now() };
   try { yt.seekTo(t, true); } catch (e) {}
@@ -1011,7 +1068,7 @@ function renderStats(W) {
     const rows = P[s].map((x, p) => statRow(s, p, x.c, x.pts, teamA, esc(pLabel(s, p)), Object.keys(x.c).length || x.pts ? '' : 'zero')).join('');
     return `<div><h3><span class="${s ? 'dotA' : 'dotH'}"></span>${esc(tName(s))}</h3>` +
       `<div class="sum"><span>사이드아웃 <b>${pc(t.rcvWon, t.rcv)}</b> (${t.rcvWon}/${t.rcv})</span><span>브레이크 <b>${pc(t.srvWon, t.srv)}</b> (${t.srvWon}/${t.srv})</span>` +
-      `<span>득점: 공격 ${t.by.atk} · 블로킹 ${t.by.blk} · 서브 ${t.by.srv} · 상대 범실 ${t.by.err}</span><span>범실로 내준 점수 ${o.by.err}</span></div>` +
+      `<span>득점: 공격 ${t.by.atk} · 블로킹 ${t.by.blk} · 서브 ${t.by.srv} · 상대 범실 ${t.by.err}${t.by.flag ? ` · 미기록 ${t.by.flag}` : ''}</span><span>범실로 내준 점수 ${o.by.err}</span></div>` +
       `<div class="list"><table><thead><tr><th class="l" rowspan="2">선수</th><th rowspan="2">득점</th><th class="grp" colspan="4">서브</th><th class="grp" colspan="4">리시브</th>` +
       `<th class="grp" colspan="7">공격</th><th class="grp">블로킹</th><th class="grp" colspan="2">디그</th><th class="grp">토스</th></tr>` +
       `<tr><th class="gl">시도</th><th>에이스</th><th>범실</th><th>효율</th><th class="gl">시도</th><th>정확</th><th>완벽</th><th>범실</th>` +
@@ -1100,6 +1157,14 @@ $('bClearBase').onclick = () => {
   render(); toast('기본 위치를 처음 배치로 되돌렸습니다');
 };
 $('pHome').onclick = () => manualPoint(0);
+$('fHome').onclick = () => flagPoint(0);
+$('fAway').onclick = () => flagPoint(1);
+$('fNext').onclick = () => { const i = nextTodo(); if (i < 0) { toast('기록 안 한 플래그가 없습니다'); return; } openRally(i); $('code').focus({ preventScroll: true }); };
+document.addEventListener('keydown', e => {      // Alt+1 / Alt+2 = 득점 플래그 (코드 입력창에서도)
+  if (!e.altKey || e.ctrlKey || e.metaKey || (e.code !== 'Digit1' && e.code !== 'Digit2')) return;
+  const t = e.target; if (t && t !== codeIn && /^(INPUT|SELECT|TEXTAREA)$/.test(t.tagName)) return;
+  e.preventDefault(); flagPoint(e.code === 'Digit1' ? 0 : 1);
+}, true);
 $('pAway').onclick = () => manualPoint(1);
 $('by').onchange = () => { draft.by = $('by').value; persist(); };
 $('bUndo').onclick = () => {
@@ -1110,10 +1175,11 @@ $('bDelRally').onclick = () => {
   if (draft.edit == null || !confirm(`#${draft.edit + 1} 랠리 기록을 지울까요?`)) return;
   pushUndo(); M.rallies.splice(draft.edit, 1); draft = newDraft(); sel = null; changed();
 };
+$('editInfo').addEventListener('click', e => { const b = e.target.closest('[data-seek]'); if (b) seek(+b.dataset.seek - opt.pre, true); });
 $('bCancelEdit').onclick = () => { draft = newDraft(); sel = null; render(); };
 function openRally(i) {
   const r = M.rallies[i];
-  draft = { pos: clone(r.pos), acts: clone(r.acts), t: r.t, why: r.why, by: r.by != null ? r.win + ':' + r.by : '', edit: i };
+  draft = { pos: clone(r.pos), acts: clone(r.acts), t: r.t, pt: r.pt, why: r.why, by: r.by != null ? r.win + ':' + r.by : '', edit: i };
   sel = null; pend = null; overlay = false; render(); seek(r.t, false);
 }
 $('acts').addEventListener('click', e => {
@@ -1126,7 +1192,10 @@ $('acts').addEventListener('click', e => {
   render();
 });
 $('whys').addEventListener('click', e => { const b = e.target.closest('[data-why]'); if (!b) return; draft.why = b.dataset.why; if (draft.why === 'err') draft.by = ''; render(); });
-$('rBody').addEventListener('click', e => { const tr = e.target.closest('tr[data-i]'); if (tr) openRally(+tr.dataset.i); });
+$('rBody').addEventListener('click', e => {
+  const pt = e.target.closest('[data-pt]'); if (pt) { seek(+pt.dataset.pt - opt.pre, true); return; }   // 득점 순간만 보기
+  const tr = e.target.closest('tr[data-i]'); if (tr) openRally(+tr.dataset.i);
+});
 $('roster').addEventListener('input', e => {
   const t = e.target; if (!t.dataset.f) return;
   (t.dataset.s === '1' ? M.away : M.home).players[+t.dataset.p][t.dataset.f] = t.value.trim();
@@ -1178,6 +1247,15 @@ function render() {
   $('pAway').textContent = `${tName(1)} 득점` + (draft.edit != null ? ' (수정 저장)' : '');
   $('pHome').disabled = $('pAway').disabled = draft.edit == null && W.over;
   $('editRow').classList.toggle('hide', draft.edit == null);
+  $('editInfo').innerHTML = draft.edit == null ? '' : `<b style="color:var(--accent)">#${draft.edit + 1} 랠리 편집 중</b>` + (draft.pt != null ? ` · 🚩 득점 순간 <span class="tlink" data-seek="${draft.pt}">${fmtT(draft.pt)}</span>` : '') +
+    ' — 영상을 보며 선수 동작을 코드·패드로 넣고, 득점한 팀의 「득점 (수정 저장)」을 누르세요';
+  // 득점 플래그 줄
+  const todo = M.rallies.filter(r => r.why === 'flag' && !r.acts.length).length, nFlag = M.rallies.filter(r => r.pt != null).length;
+  $('flagRow').classList.toggle('hide', !ytId(M.video));
+  $('fHome').textContent = `🚩 ${tName(0)} 득점`; $('fAway').textContent = `🚩 ${tName(1)} 득점`;
+  $('fHome').disabled = $('fAway').disabled = draft.edit != null || W.over;
+  $('flagInfo').textContent = (nFlag ? `득점 순간 ${nFlag}개` : 'Alt+1 · Alt+2 로도 찍힙니다') + (todo ? ` · 선수 기록 전 ${todo}개` : '');
+  $('fNext').classList.toggle('hide', !todo);
   $('baseState').textContent = BASE_POS === DEFAULT_POS ? '기본 위치: 처음 배치(3×3)' : '기본 위치: 내가 저장한 배치';
   $('bClearBase').disabled = BASE_POS === DEFAULT_POS;
   $('tLabel').textContent = draft.t != null ? '시작 ' + fmtT(draft.t) : '(비우면 첫 동작 3초 전)';
@@ -1193,8 +1271,9 @@ function render() {
     const inf = W.info[i], who = r.by != null ? ' ' + esc(pLabel(r.win, r.by)) : '';
     return `<tr class="click${draft.edit === i ? ' sel' : ''}" data-i="${i}"><td>${i + 1}</td><td>${inf ? inf.set : '-'}</td><td>${inf ? inf.score[0] + ':' + inf.score[1] : '경기 후'}</td>` +
       `<td class="l"><span class="${r.win ? 'dotA' : 'dotH'}"></span>${esc(tName(r.win))}${who}</td><td class="l">${WHY[r.why] || ''}</td>` +
-      `<td class="l"><div class="codes mono">${esc(r.acts.map(codeOf).join(' '))}</div></td><td>${r.t != null ? `<span class="tlink">${fmtT(r.t)}</span>` : ''}</td></tr>`;
-  }).join('') || '<tr><td colspan="7" class="muted" style="padding:14px;white-space:normal">아직 기록이 없습니다. 영상을 보며 코드(예: 7S+)나 패드로 동작을 넣으면, 득점 동작에서 랠리가 자동으로 기록됩니다.</td></tr>';
+      `<td class="l"><div class="codes mono">${r.acts.length ? esc(r.acts.map(codeOf).join(' ')) : r.why === 'flag' ? '<span class="rtodo">🚩 선수 기록 전</span>' : ''}</div></td>` +
+      `<td>${r.pt != null ? `<span class="tlink" data-pt="${r.pt}" title="득점 장면 재생">${fmtT(r.pt)}</span>` : ''}</td><td>${r.t != null ? `<span class="tlink">${fmtT(r.t)}</span>` : ''}</td></tr>`;
+  }).join('') || '<tr><td colspan="8" class="muted" style="padding:14px;white-space:normal">아직 기록이 없습니다. 영상을 보다가 득점이 나면 「🚩 득점」 플래그를 찍거나, 코드(예: 7S+)·패드로 동작을 넣으면 득점 동작에서 랠리가 자동으로 기록됩니다.</td></tr>';
   const lst = $('rBody').closest('.list'); if (draft.edit == null) lst.scrollTop = lst.scrollHeight;
   renderStats(W);
   renderClips();
@@ -1217,10 +1296,10 @@ function renderRoster() {
 /* ---------- CSV 내보내기 (엑셀에서 열 수 있게 BOM 포함) ---------- */
 function buildCsv() {
   const W = walk(), zs = pt => { const z = pt && zoneAt(pt); return z ? `${tName(z.side)} ${z.z}` : ''; };
-  const rows = [['랠리', '세트', '랠리 후 점수', '득점 팀', '득점 방법', '득점 선수', '랠리 시각', '순서', '동작 시각', '팀', '등번호', '이름', '동작', '평가', '평가 뜻', '코드', '출발 구역', '도착 구역']];
+  const rows = [['랠리', '세트', '랠리 후 점수', '득점 팀', '득점 방법', '득점 선수', '랠리 시각', '득점 시각', '순서', '동작 시각', '팀', '등번호', '이름', '동작', '평가', '평가 뜻', '코드', '출발 구역', '도착 구역']];
   M.rallies.forEach((r, ri) => {
     const inf = W.info[ri];
-    const base = [ri + 1, inf ? inf.set : '', inf ? inf.score.join(':') : '', tName(r.win), WHY[r.why] || '', r.by != null ? pLabel(r.win, r.by) : '', fmtT(r.t)];
+    const base = [ri + 1, inf ? inf.set : '', inf ? inf.score.join(':') : '', tName(r.win), WHY[r.why] || '', r.by != null ? pLabel(r.win, r.by) : '', fmtT(r.t), fmtT(r.pt)];
     if (!r.acts.length) rows.push([...base, '', '', '', '', '', '', '', '', '', '', '']);
     r.acts.forEach((a, k) => {
       const q = (a.side ? M.away : M.home).players[a.p];
@@ -1404,7 +1483,7 @@ function aiWaitVideo() {
         if (!aiVideo.error) aiSpanToTrim();
         toast(aiVideo.error ? aiVideo.error : `잘라 냈습니다 · ${fmtT(aiVideo.offset || 0)} ~ ${fmtT((aiVideo.offset || 0) + aiVideo.duration)} 남김 · 분석 구간도 이 부분으로 맞췄습니다`);
       }
-      else toast('영상을 받았습니다 · 코트 모서리를 찍어 주세요');
+      else toast('영상을 받았습니다');
       aiGetFrame(vNow() || aiVideo.offset || 0);
     }
   }, 1500);
